@@ -1,0 +1,183 @@
+<?php
+session_start();
+require 'includes/db.php';
+
+// --- LÓGICA DE FILTROS ---
+$busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
+$categoria = isset($_GET['cat']) ? $_GET['cat'] : 'todas';
+$orden = isset($_GET['orden']) ? $_GET['orden'] : 'recientes';
+
+// Construcción de la consulta SQL dinámica
+$sql = "SELECT t.*, u.nombre, u.foto, u.rol,
+        (SELECT COUNT(*) FROM foro_respuestas WHERE tema_id = t.id) as num_respuestas
+        FROM foro_temas t
+        JOIN usuarios u ON t.usuario_id = u.id
+        WHERE 1=1"; // Truco para concatenar ANDs
+
+if (!empty($busqueda)) {
+    $sql .= " AND (t.titulo LIKE '%$busqueda%' OR t.contenido LIKE '%$busqueda%')";
+}
+
+if ($categoria !== 'todas') {
+    $catLimpia = $conn->real_escape_string($categoria);
+    $sql .= " AND t.categoria = '$catLimpia'";
+}
+
+// Ordenación
+if ($orden === 'populares') {
+    $sql .= " ORDER BY num_respuestas DESC, t.fecha DESC";
+} elseif ($orden === 'antiguos') {
+    $sql .= " ORDER BY t.fecha ASC";
+} else {
+    $sql .= " ORDER BY t.fecha DESC"; // Default: Recientes
+}
+
+$resultado = $conn->query($sql);
+
+// Función para colores de categorías
+function badgeColor($cat) {
+    switch($cat) {
+        case 'Teorías': return 'bg-purple text-white'; // Necesitaremos CSS o usar uno standard
+        case 'Noticias': return 'bg-danger';
+        case 'Recomendaciones': return 'bg-success';
+        case 'Off-Topic': return 'bg-secondary';
+        default: return 'bg-primary';
+    }
+}
+?>
+<?php include 'includes/header.php'; ?>
+
+<main class="container py-5">
+    
+    <div class="row">
+        <div class="col-lg-3 mb-4">
+            
+            <?php if(isset($_SESSION['usuario'])): ?>
+                <a href="crear_tema.php" class="btn btn-primary w-100 mb-4 fw-bold shadow-sm">
+                    <i class="fas fa-plus me-2"></i>Crear Nuevo Tema
+                </a>
+            <?php else: ?>
+                <div class="alert alert-info small text-center mb-4">
+                    <a href="login.php" class="fw-bold">Entra</a> para crear temas.
+                </div>
+            <?php endif; ?>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <h6 class="fw-bold text-muted mb-3">BUSCAR</h6>
+                    <form action="" method="GET">
+                        <div class="input-group">
+                            <input type="text" name="q" class="form-control" placeholder="Palabra clave..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                            <button class="btn btn-outline-primary" type="submit"><i class="fas fa-search"></i></button>
+                        </div>
+                        <?php if($categoria != 'todas') echo '<input type="hidden" name="cat" value="'.$categoria.'">'; ?>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush rounded-3">
+                        <div class="list-group-item bg-light fw-bold text-muted small">CATEGORÍAS</div>
+                        
+                        <a href="foro.php?cat=todas" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='todas'?'active':''; ?>">
+                            Todas
+                            <i class="fas fa-layer-group opacity-50"></i>
+                        </a>
+                        <a href="foro.php?cat=General" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='General'?'active':''; ?>">
+                            General
+                        </a>
+                        <a href="foro.php?cat=Teorías" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Teorías'?'active':''; ?>">
+                            Teorías
+                            <i class="fas fa-brain opacity-50"></i>
+                        </a>
+                        <a href="foro.php?cat=Noticias" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Noticias'?'active':''; ?>">
+                            Noticias
+                            <i class="fas fa-bullhorn opacity-50"></i>
+                        </a>
+                        <a href="foro.php?cat=Recomendaciones" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Recomendaciones'?'active':''; ?>">
+                            Recomendaciones
+                            <i class="fas fa-thumbs-up opacity-50"></i>
+                        </a>
+                        <a href="foro.php?cat=Off-Topic" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Off-Topic'?'active':''; ?>">
+                            Off-Topic
+                            <i class="fas fa-coffee opacity-50"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="fw-bold mb-0">
+                    <?php echo ($categoria === 'todas') ? 'Temas Recientes' : 'Categoría: ' . htmlspecialchars($categoria); ?>
+                </h4>
+                
+                <form action="" method="GET" class="d-flex align-items-center">
+                    <?php if($categoria != 'todas') echo '<input type="hidden" name="cat" value="'.$categoria.'">'; ?>
+                    <?php if($busqueda != '') echo '<input type="hidden" name="q" value="'.$busqueda.'">'; ?>
+                    
+                    <label class="me-2 small text-muted">Ordenar:</label>
+                    <select name="orden" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 140px;">
+                        <option value="recientes" <?php echo $orden=='recientes'?'selected':''; ?>>Más Nuevos</option>
+                        <option value="antiguos" <?php echo $orden=='antiguos'?'selected':''; ?>>Más Antiguos</option>
+                        <option value="populares" <?php echo $orden=='populares'?'selected':''; ?>>Más Populares</option>
+                    </select>
+                </form>
+            </div>
+
+            <div class="d-flex flex-column gap-3">
+                <?php if ($resultado->num_rows > 0): ?>
+                    <?php while($tema = $resultado->fetch_assoc()): ?>
+                        
+                        <div class="card shadow-sm border-0 tema-card">
+                            <div class="card-body d-flex gap-3">
+                                <div class="text-center d-none d-sm-block" style="width: 60px;">
+                                    <?php $foto = !empty($tema['foto']) ? $tema['foto'] : 'https://via.placeholder.com/50'; ?>
+                                    <img src="<?php echo $foto; ?>" class="rounded-circle mb-1" width="50" height="50" style="object-fit:cover;">
+                                </div>
+
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <div>
+                                            <span class="badge <?php echo badgeColor($tema['categoria']); ?> mb-1 me-1"><?php echo $tema['categoria']; ?></span>
+                                            <a href="tema.php?id=<?php echo $tema['id']; ?>" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
+                                                <?php echo htmlspecialchars($tema['titulo']); ?>
+                                            </a>
+                                        </div>
+                                        
+                                        <div class="text-center text-muted ms-3" style="min-width: 60px;">
+                                            <i class="far fa-comment-dots fs-5"></i>
+                                            <div class="small fw-bold"><?php echo $tema['num_respuestas']; ?></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <p class="text-secondary small mb-2 text-truncate" style="max-width: 90%;">
+                                        <?php echo htmlspecialchars(substr($tema['contenido'], 0, 120)) . '...'; ?>
+                                    </p>
+
+                                    <div class="d-flex align-items-center text-muted" style="font-size: 0.8rem;">
+                                        <span class="me-3"><i class="far fa-user me-1"></i> <?php echo $tema['nombre']; ?></span>
+                                        <span><i class="far fa-clock me-1"></i> <?php echo date('d/m/Y', strtotime($tema['fecha'])); ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="text-center py-5">
+                        <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" width="100" class="mb-3 opacity-50">
+                        <h5 class="text-muted">No se encontraron temas</h5>
+                        <p class="text-muted small">Prueba a cambiar los filtros o crea uno nuevo.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<?php include 'includes/footer.php'; ?>

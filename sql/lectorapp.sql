@@ -190,6 +190,22 @@ INSERT INTO `usuarios` (`id`, `nombre`, `email`, `password`, `rol`, `fecha_regis
 (4, 'iorittsu', 'ioritzecheverria@gmail.com', '$2y$10$jH7R7EBcEIPOAxvRb1WZCO9K9cvrCvbc811nD6zdYFjGAP5Le0wBG', 'lector', '2026-01-13 08:47:18', 'assets/img/avatars/user_4_1768291578.jpg'),
 (5, 'Papito', 'papito@gmail.com', '$2y$10$Kx/nR81bv10lrt69GSiOx.iEHe918w98qLGhk5tqYsdnGr9ZdazB6', 'lector', '2026-01-13 09:01:40', NULL);
 
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `capitulos_leidos`
+--
+
+CREATE TABLE capitulos_leidos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  capitulo_id INT NOT NULL,
+  fecha_leido DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (capitulo_id) REFERENCES capitulos(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_leido (usuario_id, capitulo_id)
+);
+
 --
 -- Índices para tablas volcadas
 --

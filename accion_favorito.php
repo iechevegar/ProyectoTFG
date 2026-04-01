@@ -12,6 +12,13 @@ if (isset($_GET['id']) && isset($_GET['accion'])) {
     $obra_id = intval($_GET['id']);
     $accion = $_GET['accion'];
     
+    // --- PROTECCIÓN BACKEND: Si es admin, lo devolvemos sin hacer nada ---
+    if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        header("Location: detalle.php?id=" . $obra_id);
+        exit();
+    }
+    // --------------------------------------------------------------------
+    
     // Obtener ID del usuario
     $nombreUser = $_SESSION['usuario'];
     $sqlUser = "SELECT id FROM usuarios WHERE nombre = ?";
@@ -24,7 +31,8 @@ if (isset($_GET['id']) && isset($_GET['accion'])) {
 
     if ($accion === 'poner') {
         // Insertar (Ignora error si ya existe gracias a UNIQUE KEY)
-        $sql = "INSERT INTO favoritos (usuario_id, obra_id) VALUES (?, ?)";
+        // Nota: Le he añadido 'IGNORE' para que no salte error fatal en PHP si se recarga la página
+        $sql = "INSERT IGNORE INTO favoritos (usuario_id, obra_id) VALUES (?, ?)";
         $stmtIns = $conn->prepare($sql);
         $stmtIns->bind_param("ii", $usuario_id, $obra_id);
         $stmtIns->execute();

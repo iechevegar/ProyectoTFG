@@ -18,33 +18,40 @@ function tiempo_transcurrido($fecha) {
 $busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
 $filtro_genero = isset($_GET['genero']) ? $conn->real_escape_string($_GET['genero']) : '';
 
-$sql = "SELECT * FROM obras WHERE 1=1";
+// AÑADIDO: Subconsulta para sacar la nota media de cada obra
+$sql = "SELECT o.*, 
+        (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
+        FROM obras o WHERE 1=1";
+
 if (!empty($busqueda)) {
-    $sql .= " AND (titulo LIKE '%$busqueda%' OR autor LIKE '%$busqueda%' OR generos LIKE '%$busqueda%')";
+    $sql .= " AND (o.titulo LIKE '%$busqueda%' OR o.autor LIKE '%$busqueda%' OR o.generos LIKE '%$busqueda%')";
 }
 if (!empty($filtro_genero)) {
-    $sql .= " AND generos LIKE '%$filtro_genero%'";
+    $sql .= " AND o.generos LIKE '%$filtro_genero%'";
 }
-$sql .= " ORDER BY id DESC"; 
+$sql .= " ORDER BY o.id DESC"; 
 $resultado = $conn->query($sql);
 
 // 2. OBRAS DESTACADAS (HERO SLIDER)
 $obras_destacadas = [];
 if (empty($busqueda) && empty($filtro_genero)) {
-    $resDest = $conn->query("SELECT * FROM obras ORDER BY RAND() LIMIT 3");
+    // AÑADIDO: Subconsulta nota media
+    $resDest = $conn->query("SELECT o.*, 
+                             (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
+                             FROM obras o ORDER BY RAND() LIMIT 3");
     while($row = $resDest->fetch_assoc()) {
         $obras_destacadas[] = $row;
     }
 }
 
-// 3. NUEVOS CAPÍTULOS (ÚLTIMOS 7 DÍAS) - NUEVO BLOQUE
-// Hacemos JOIN para sacar la portada y título de la obra asociada al capítulo
+// 3. NUEVOS CAPÍTULOS (ÚLTIMOS 7 DÍAS)
 $sqlNuevos = "SELECT c.id as cap_id, c.titulo as cap_titulo, c.fecha_subida, 
-                     o.id as obra_id, o.titulo as obra_titulo, o.portada 
+                     o.id as obra_id, o.titulo as obra_titulo, o.portada,
+                     (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media
               FROM capitulos c
               JOIN obras o ON c.obra_id = o.id
               WHERE c.fecha_subida >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-              ORDER BY c.fecha_subida DESC LIMIT 8"; // Limitamos a 8 para que no sea infinito
+              ORDER BY c.fecha_subida DESC LIMIT 8"; 
 $resNuevos = $conn->query($sqlNuevos);
 
 ?>
@@ -60,6 +67,8 @@ $resNuevos = $conn->query($sqlNuevos);
     </div>
     <div class="carousel-inner">
         <?php foreach($obras_destacadas as $index => $obra): ?>
+            <?php $nota_carrusel = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; ?>
+            
             <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?>" style="height: 450px; background-color: #111;">
                 <div style="position: absolute; top:0; left:0; width:100%; height:100%; 
                             background: url('<?php echo $obra['portada']; ?>') center/cover; 
@@ -74,8 +83,14 @@ $resNuevos = $conn->query($sqlNuevos);
                         <div class="col-md-8 text-white p-4">
                             <span class="badge bg-warning text-dark mb-3 text-uppercase fw-bold">Recomendado</span>
                             <h1 class="display-4 fw-bold mb-2"><?php echo $obra['titulo']; ?></h1>
-                            <p class="h5 text-light mb-4" style="font-weight: 300;">por <?php echo $obra['autor']; ?></p>
-                            <a href="detalle.php?id=<?php echo $obra['id']; ?>" class="btn btn-primary btn-lg rounded-pill px-5 shadow">
+                            
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="text-warning fs-5 me-2"><i class="fas fa-star"></i></span>
+                                <span class="fw-bold fs-5 text-white"><?php echo $nota_carrusel; ?> <small class="text-white-50 fs-6 fw-normal">/ 5</small></span>
+                                <span class="ms-3 text-light opacity-75">por <?php echo $obra['autor']; ?></span>
+                            </div>
+                            
+                            <a href="detalle.php?id=<?php echo $obra['id']; ?>" class="btn btn-primary btn-lg rounded-pill px-5 shadow mt-2">
                                 <i class="fas fa-book-reader me-2"></i>Leer Ahora
                             </a>
                         </div>
@@ -105,11 +120,17 @@ $resNuevos = $conn->query($sqlNuevos);
             <?php if ($resNuevos->num_rows > 0): ?>
                 <div class="d-flex gap-3 overflow-auto pb-3" style="scrollbar-width: thin;">
                     <?php while($cap = $resNuevos->fetch_assoc()): ?>
+                        <?php $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-'; ?>
+                        
                         <div class="card shadow-sm border-0 flex-shrink-0" style="width: 160px;">
                             <a href="visor.php?capId=<?php echo $cap['cap_id']; ?>&obraId=<?php echo $cap['obra_id']; ?>" class="text-decoration-none text-dark">
                                 <div class="position-relative">
                                     <img src="<?php echo $cap['portada']; ?>" class="card-img-top" style="height: 220px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
                                     <span class="position-absolute top-0 end-0 badge bg-danger m-1 shadow-sm">UP</span>
+                                    
+                                    <span class="position-absolute bottom-0 start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center">
+                                        <i class="fas fa-star text-warning me-1" style="font-size: 0.65rem;"></i> <?php echo $nota_nov; ?>
+                                    </span>
                                 </div>
                                 <div class="card-body p-2">
                                     <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;" title="<?php echo $cap['obra_titulo']; ?>">
@@ -133,6 +154,7 @@ $resNuevos = $conn->query($sqlNuevos);
             <?php endif; ?>
         </div>
     <?php endif; ?>
+
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
         <h2 class="fw-bold text-dark m-0">
             <?php 
@@ -143,10 +165,10 @@ $resNuevos = $conn->query($sqlNuevos);
         </h2>
         
         <div class="dropdown">
-            <button class="btn btn-outline-dark dropdown-toggle btn-sm" type="button" data-bs-toggle="dropdown">
-                <i class="fas fa-filter me-1"></i> Filtrar Género
+            <button class="btn btn-outline-dark dropdown-toggle btn-sm fw-bold" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-filter me-1"></i> Géneros
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                 <li><a class="dropdown-item" href="index.php">Ver Todo</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="index.php?genero=Acción">Acción</a></li>
@@ -161,24 +183,29 @@ $resNuevos = $conn->query($sqlNuevos);
     <?php if ($resultado->num_rows > 0): ?>
         <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-4 mb-5">
             <?php while($obra = $resultado->fetch_assoc()): ?>
+                <?php $nota_cat = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; ?>
+                
                 <div class="col">
                     <a href="detalle.php?id=<?php echo $obra['id']; ?>" class="text-decoration-none text-dark">
-                        <div class="card h-100 shadow-sm border-0 hover-effect overflow-hidden">
+                        <div class="card h-100 shadow-sm border hover-effect overflow-hidden bg-white">
                             <div class="position-relative" style="padding-top: 145%;">
                                 <img src="<?php echo $obra['portada']; ?>" 
                                      class="position-absolute top-0 start-0 w-100 h-100 zoom-img" 
-                                     style="object-fit: cover;" 
+                                     style="object-fit: cover; border-bottom: 1px solid #eee;" 
                                      alt="Portada">
-                                <?php $primer_genero = explode(',', $obra['generos'])[0]; ?>
-                                <span class="position-absolute bottom-0 start-0 badge bg-dark m-2 bg-opacity-75">
-                                    <?php echo trim($primer_genero); ?>
-                                </span>
                             </div>
                             
-                            <div class="card-body p-2">
-                                <h6 class="card-title fw-bold text-truncate mb-1 text-dark" title="<?php echo $obra['titulo']; ?>">
-                                    <?php echo $obra['titulo']; ?>
-                                </h6>
+                            <div class="card-body p-2 d-flex flex-column justify-content-between">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <h6 class="card-title fw-bold text-truncate mb-0 text-dark pe-1" title="<?php echo $obra['titulo']; ?>" style="max-width: 75%;">
+                                        <?php echo $obra['titulo']; ?>
+                                    </h6>
+                                    
+                                    <div class="bg-light border rounded px-1 d-flex align-items-center flex-shrink-0 text-dark" style="font-size: 0.75rem;">
+                                        <i class="fas fa-star text-warning me-1" style="font-size: 0.65rem;"></i><span class="fw-bold"><?php echo $nota_cat; ?></span>
+                                    </div>
+                                </div>
+                                
                                 <small class="text-muted d-block text-truncate">
                                     <?php echo $obra['autor']; ?>
                                 </small>
@@ -189,31 +216,31 @@ $resNuevos = $conn->query($sqlNuevos);
             <?php endwhile; ?>
         </div>
     <?php else: ?>
-        <div class="text-center py-5 bg-light rounded-3">
+        <div class="text-center py-5 bg-light rounded-3 border">
             <i class="fas fa-search fa-3x text-muted mb-3 opacity-50"></i>
             <h3 class="fw-bold text-secondary">No encontramos obras.</h3>
             <p class="text-muted">Prueba a buscar con otro nombre o género.</p>
-            <a href="index.php" class="btn btn-primary mt-2">Ver todo el catálogo</a>
+            <a href="index.php" class="btn btn-primary mt-2 fw-bold">Ver todo el catálogo</a>
         </div>
     <?php endif; ?>
 
 </main>
 
 <style>
+    body { background-color: #fbfbfb; } /* Fondo ligerísimamente gris para que las tarjetas blancas resalten */
     .hover-effect { 
         transition: transform 0.2s ease, box-shadow 0.2s ease; 
-        border-radius: 10px;
+        border-radius: 8px;
     }
     .hover-effect:hover { 
         transform: translateY(-5px); 
-        box-shadow: 0 10px 20px rgba(0,0,0,0.15)!important; 
+        box-shadow: 0 10px 20px rgba(0,0,0,0.08)!important; 
     }
     .zoom-img { transition: transform 0.4s ease; }
-    .hover-effect:hover .zoom-img { transform: scale(1.05); }
+    .hover-effect:hover .zoom-img { transform: scale(1.03); }
     
-    /* Scroll horizontal bonito para Chrome/Safari/Edge */
     .overflow-auto::-webkit-scrollbar { height: 6px; }
-    .overflow-auto::-webkit-scrollbar-track { background: #f1f1f1; }
+    .overflow-auto::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px;}
     .overflow-auto::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
     .overflow-auto::-webkit-scrollbar-thumb:hover { background: #bbb; }
 </style>

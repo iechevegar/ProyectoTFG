@@ -28,10 +28,14 @@ $resultado = $conn->query($sql);
         <h2 class="fw-bold"><i class="fas fa-tachometer-alt text-primary"></i> Panel de Control</h2>
         
         <div class="d-flex gap-2">
-            <a href="admin_usuarios.php" class="btn btn-dark text-white">
+            <a href="admin_moderacion.php" class="btn btn-danger text-white shadow-sm fw-bold">
+                <i class="fas fa-shield-alt me-2"></i>Moderación
+            </a>
+            
+            <a href="admin_usuarios.php" class="btn btn-dark text-white shadow-sm">
                 <i class="fas fa-users-cog me-2"></i>Usuarios
             </a>
-            <a href="agregar_obra.php" class="btn btn-success text-white">
+            <a href="agregar_obra.php" class="btn btn-success text-white shadow-sm">
                 <i class="fas fa-plus me-2"></i>Nueva Obra
             </a>
         </div>

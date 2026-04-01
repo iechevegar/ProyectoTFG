@@ -13,4 +13,6 @@ if ($conn->connect_error) {
 }
 // Forzar utf8
 $conn->set_charset("utf8");
+date_default_timezone_set('Europe/Madrid');
+$conn->query("SET time_zone = '+02:00'");
 ?>

@@ -52,11 +52,14 @@ if (session_status() === PHP_SESSION_NONE) {
                 </li>
 
                 <?php if(isset($_SESSION['usuario'])): ?>
+                    
+                    <?php if(!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin'): ?>
                     <li class="nav-item me-2">
                         <a class="nav-link fw-bold text-primary" href="biblioteca.php">
                             <i class="fas fa-bookmark me-1"></i> Biblioteca
                         </a>
                     </li>
+                    <?php endif; ?>
                     
                     <li class="nav-item dropdown ms-lg-2">
                         <a class="nav-link dropdown-toggle btn btn-light border px-3 rounded-pill d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown">

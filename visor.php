@@ -7,6 +7,21 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 if (!isset($_GET['capId'])) die("Error: No se ha especificado un capítulo.");
 
 $capId = intval($_GET['capId']);
+
+// --- MARCAR COMO LEÍDO AUTOMÁTICAMENTE ---
+// Solo se ejecuta si hay sesión iniciada Y EL ROL NO ES ADMIN
+if (isset($_SESSION['usuario']) && isset($_SESSION['rol']) && $_SESSION['rol'] !== 'admin') {
+    $nombreUser = $_SESSION['usuario'];
+    $resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
+    if ($resUser && $resUser->num_rows > 0) {
+        $userId = $resUser->fetch_assoc()['id'];
+        $stmtLeido = $conn->prepare("INSERT IGNORE INTO capitulos_leidos (usuario_id, capitulo_id) VALUES (?, ?)");
+        $stmtLeido->bind_param("ii", $userId, $capId);
+        $stmtLeido->execute();
+    }
+}
+// -----------------------------------------
+
 $obraId = isset($_GET['obraId']) ? intval($_GET['obraId']) : 0;
 
 // 2. LOGICA DE NAVEGACIÓN

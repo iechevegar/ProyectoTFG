@@ -2,42 +2,77 @@
 session_start();
 require 'includes/db.php';
 
+// --- FUNCIÓN AUXILIAR DE TIEMPO ---
+function tiempo_transcurrido_foro($fecha) {
+    if (!$fecha) return "";
+    $timestamp = strtotime($fecha);
+    $diferencia = time() - $timestamp;
+    
+    if ($diferencia < 60) return "Hace instantes";
+    if ($diferencia < 3600) return "Hace " . floor($diferencia / 60) . " min";
+    if ($diferencia < 86400) return "Hace " . floor($diferencia / 3600) . " h";
+    return date("d/m/Y", $timestamp);
+}
+
 // --- LÓGICA DE FILTROS ---
 $busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
 $categoria = isset($_GET['cat']) ? $_GET['cat'] : 'todas';
-$orden = isset($_GET['orden']) ? $_GET['orden'] : 'recientes';
+$orden = isset($_GET['orden']) ? $_GET['orden'] : 'actividad';
 
-// Construcción de la consulta SQL dinámica
-$sql = "SELECT t.*, u.nombre, u.foto, u.rol,
-        (SELECT COUNT(*) FROM foro_respuestas WHERE tema_id = t.id) as num_respuestas
-        FROM foro_temas t
-        JOIN usuarios u ON t.usuario_id = u.id
-        WHERE 1=1"; // Truco para concatenar ANDs
+// --- CONFIGURACIÓN DE PAGINACIÓN ---
+$resultados_por_pagina = 8; // Mostramos 8 temas por página
+$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
+// --- CONDICIÓN SQL BASE (Para contar y buscar) ---
+$condicion_sql = "WHERE 1=1";
 if (!empty($busqueda)) {
-    $sql .= " AND (t.titulo LIKE '%$busqueda%' OR t.contenido LIKE '%$busqueda%')";
+    $condicion_sql .= " AND (t.titulo LIKE '%$busqueda%' OR t.contenido LIKE '%$busqueda%')";
 }
-
 if ($categoria !== 'todas') {
     $catLimpia = $conn->real_escape_string($categoria);
-    $sql .= " AND t.categoria = '$catLimpia'";
+    $condicion_sql .= " AND t.categoria = '$catLimpia'";
 }
+
+// --- CALCULAR TOTAL DE PÁGINAS ---
+$sqlTotal = "SELECT COUNT(t.id) as total FROM foro_temas t " . $condicion_sql;
+$resTotal = $conn->query($sqlTotal);
+$total_registros = $resTotal->fetch_assoc()['total'];
+$total_paginas = ceil($total_registros / $resultados_por_pagina);
+
+// --- CONSTRUCCIÓN DE LA CONSULTA SQL PRINCIPAL ---
+$sql = "SELECT t.*, u.nombre, u.foto, u.rol,
+        (SELECT COUNT(*) FROM foro_respuestas WHERE tema_id = t.id) as num_respuestas,
+        (SELECT fecha FROM foro_respuestas WHERE tema_id = t.id ORDER BY fecha DESC LIMIT 1) as ultima_actividad_fecha,
+        (SELECT u2.nombre FROM foro_respuestas r JOIN usuarios u2 ON r.usuario_id = u2.id WHERE r.tema_id = t.id ORDER BY r.fecha DESC LIMIT 1) as ultimo_usuario
+        FROM foro_temas t
+        JOIN usuarios u ON t.usuario_id = u.id
+        $condicion_sql";
 
 // Ordenación
 if ($orden === 'populares') {
     $sql .= " ORDER BY num_respuestas DESC, t.fecha DESC";
 } elseif ($orden === 'antiguos') {
     $sql .= " ORDER BY t.fecha ASC";
+} elseif ($orden === 'recientes') {
+    $sql .= " ORDER BY t.fecha DESC"; 
 } else {
-    $sql .= " ORDER BY t.fecha DESC"; // Default: Recientes
+    $sql .= " ORDER BY COALESCE(ultima_actividad_fecha, t.fecha) DESC";
 }
 
+// Aplicar Límite de Paginación
+$sql .= " LIMIT $resultados_por_pagina OFFSET $offset";
 $resultado = $conn->query($sql);
+
+// --- PREPARAR URL PARA LOS BOTONES DE PAGINACIÓN ---
+$parametros_url = $_GET;
+unset($parametros_url['pagina']); 
+$url_base = "foro.php?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
 
 // Función para colores de categorías
 function badgeColor($cat) {
     switch($cat) {
-        case 'Teorías': return 'bg-purple text-white'; // Necesitaremos CSS o usar uno standard
+        case 'Teorías': return 'bg-purple text-white'; 
         case 'Noticias': return 'bg-danger';
         case 'Recomendaciones': return 'bg-success';
         case 'Off-Topic': return 'bg-secondary';
@@ -112,7 +147,7 @@ function badgeColor($cat) {
             
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="fw-bold mb-0">
-                    <?php echo ($categoria === 'todas') ? 'Temas Recientes' : 'Categoría: ' . htmlspecialchars($categoria); ?>
+                    <?php echo ($categoria === 'todas') ? 'Discusiones' : 'Categoría: ' . htmlspecialchars($categoria); ?>
                 </h4>
                 
                 <form action="" method="GET" class="d-flex align-items-center">
@@ -121,14 +156,15 @@ function badgeColor($cat) {
                     
                     <label class="me-2 small text-muted">Ordenar:</label>
                     <select name="orden" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 140px;">
-                        <option value="recientes" <?php echo $orden=='recientes'?'selected':''; ?>>Más Nuevos</option>
+                        <option value="actividad" <?php echo $orden=='actividad'?'selected':''; ?>>Última Actividad</option>
+                        <option value="recientes" <?php echo $orden=='recientes'?'selected':''; ?>>Temas Nuevos</option>
                         <option value="antiguos" <?php echo $orden=='antiguos'?'selected':''; ?>>Más Antiguos</option>
                         <option value="populares" <?php echo $orden=='populares'?'selected':''; ?>>Más Populares</option>
                     </select>
                 </form>
             </div>
 
-            <div class="d-flex flex-column gap-3">
+            <div class="d-flex flex-column gap-3 mb-4">
                 <?php if ($resultado->num_rows > 0): ?>
                     <?php while($tema = $resultado->fetch_assoc()): ?>
                         
@@ -158,9 +194,19 @@ function badgeColor($cat) {
                                         <?php echo htmlspecialchars(substr($tema['contenido'], 0, 120)) . '...'; ?>
                                     </p>
 
-                                    <div class="d-flex align-items-center text-muted" style="font-size: 0.8rem;">
-                                        <span class="me-3"><i class="far fa-user me-1"></i> <?php echo $tema['nombre']; ?></span>
-                                        <span><i class="far fa-clock me-1"></i> <?php echo date('d/m/Y', strtotime($tema['fecha'])); ?></span>
+                                    <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.8rem;">
+                                        <div>
+                                            <span class="me-3"><i class="far fa-user me-1"></i> <?php echo htmlspecialchars($tema['nombre']); ?> (Creador)</span>
+                                            <span><i class="far fa-calendar me-1"></i> <?php echo date('d/m/Y', strtotime($tema['fecha'])); ?></span>
+                                        </div>
+                                        
+                                        <?php if($tema['num_respuestas'] > 0): ?>
+                                            <div class="text-end d-none d-md-block">
+                                                <i class="fas fa-reply fa-rotate-180 text-primary me-1"></i>
+                                                <span class="fw-bold"><?php echo htmlspecialchars($tema['ultimo_usuario']); ?></span> 
+                                                <span class="ms-1"><?php echo tiempo_transcurrido_foro($tema['ultima_actividad_fecha']); ?></span>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -169,15 +215,44 @@ function badgeColor($cat) {
                     <?php endwhile; ?>
                 <?php else: ?>
                     <div class="text-center py-5">
-                        <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" width="100" class="mb-3 opacity-50">
+                        <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" width="100" class="mb-3 opacity-50" alt="Vacio">
                         <h5 class="text-muted">No se encontraron temas</h5>
                         <p class="text-muted small">Prueba a cambiar los filtros o crea uno nuevo.</p>
                     </div>
                 <?php endif; ?>
             </div>
 
+            <?php if ($total_paginas > 1): ?>
+                <nav aria-label="Paginación del foro" class="mt-4 mb-5">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">
+                            <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . ($pagina_actual - 1); ?>">
+                                <i class="fas fa-chevron-left"></i> Anterior
+                            </a>
+                        </li>
+                        
+                        <?php for($i = 1; $i <= $total_paginas; $i++): ?>
+                            <li class="page-item <?php echo ($pagina_actual == $i) ? 'active' : ''; ?>">
+                                <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . $i; ?>"><?php echo $i; ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        
+                        <li class="page-item <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">
+                            <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . ($pagina_actual + 1); ?>">
+                                Siguiente <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            <?php endif; ?>
+
         </div>
     </div>
 </main>
+
+<style>
+    .tema-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .tema-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.1)!important; }
+</style>
 
 <?php include 'includes/footer.php'; ?>

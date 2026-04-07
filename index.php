@@ -14,51 +14,72 @@ function tiempo_transcurrido($fecha) {
     return date("d/m/Y", $timestamp);
 }
 
-// 1. LÓGICA DE BÚSQUEDA Y FILTROS (CATÁLOGO GENERAL)
+// 1. VARIABLES DE BÚSQUEDA Y PAGINACIÓN
 $busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
 $filtro_genero = isset($_GET['genero']) ? $conn->real_escape_string($_GET['genero']) : '';
 
-// AÑADIDO: Subconsulta para sacar la nota media de cada obra
-$sql = "SELECT o.*, 
-        (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
-        FROM obras o WHERE 1=1";
+// Configuración de la paginación
+$resultados_por_pagina = 10; 
+$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
+// 2. CONSTRUIR LA CONDICIÓN SQL BASE (Para contar y buscar)
+$condicion_sql = "WHERE 1=1";
 if (!empty($busqueda)) {
-    $sql .= " AND (o.titulo LIKE '%$busqueda%' OR o.autor LIKE '%$busqueda%' OR o.generos LIKE '%$busqueda%')";
+    $condicion_sql .= " AND (titulo LIKE '%$busqueda%' OR autor LIKE '%$busqueda%' OR generos LIKE '%$busqueda%')";
 }
 if (!empty($filtro_genero)) {
-    $sql .= " AND o.generos LIKE '%$filtro_genero%'";
+    $condicion_sql .= " AND generos LIKE '%$filtro_genero%'";
 }
-$sql .= " ORDER BY o.id DESC"; 
+
+// 3. CALCULAR EL TOTAL DE PÁGINAS
+$sqlTotal = "SELECT COUNT(id) as total FROM obras " . $condicion_sql;
+$resTotal = $conn->query($sqlTotal);
+$total_registros = $resTotal->fetch_assoc()['total'];
+$total_paginas = ceil($total_registros / $resultados_por_pagina);
+
+// 4. OBTENER LAS OBRAS DE ESTA PÁGINA ESPECÍFICA
+$sql = "SELECT o.*, 
+        (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
+        FROM obras o 
+        $condicion_sql 
+        ORDER BY o.id DESC 
+        LIMIT $resultados_por_pagina OFFSET $offset"; 
 $resultado = $conn->query($sql);
 
-// 2. OBRAS DESTACADAS (HERO SLIDER)
+// 5. OBRAS DESTACADAS Y NOVEDADES (Solo se ven en la página 1 y sin filtros)
 $obras_destacadas = [];
-if (empty($busqueda) && empty($filtro_genero)) {
-    // AÑADIDO: Subconsulta nota media
+$resNuevos = null;
+
+if (empty($busqueda) && empty($filtro_genero) && $pagina_actual === 1) {
+    // Carrusel
     $resDest = $conn->query("SELECT o.*, 
                              (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
                              FROM obras o ORDER BY RAND() LIMIT 3");
     while($row = $resDest->fetch_assoc()) {
         $obras_destacadas[] = $row;
     }
+
+    // Últimos 7 días
+    $sqlNuevos = "SELECT c.id as cap_id, c.titulo as cap_titulo, c.fecha_subida, 
+                         o.id as obra_id, o.titulo as obra_titulo, o.portada,
+                         (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media
+                  FROM capitulos c
+                  JOIN obras o ON c.obra_id = o.id
+                  WHERE c.fecha_subida >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                  ORDER BY c.fecha_subida DESC LIMIT 8"; 
+    $resNuevos = $conn->query($sqlNuevos);
 }
 
-// 3. NUEVOS CAPÍTULOS (ÚLTIMOS 7 DÍAS)
-$sqlNuevos = "SELECT c.id as cap_id, c.titulo as cap_titulo, c.fecha_subida, 
-                     o.id as obra_id, o.titulo as obra_titulo, o.portada,
-                     (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media
-              FROM capitulos c
-              JOIN obras o ON c.obra_id = o.id
-              WHERE c.fecha_subida >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-              ORDER BY c.fecha_subida DESC LIMIT 8"; 
-$resNuevos = $conn->query($sqlNuevos);
-
+// PREPARAR URL PARA LOS BOTONES DE PAGINACIÓN (Mantiene la búsqueda activa)
+$parametros_url = $_GET;
+unset($parametros_url['pagina']); // Quitamos la página actual para reemplazarla luego
+$url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
 ?>
 
 <?php include 'includes/header.php'; ?>
 
-<?php if (!empty($obras_destacadas) && empty($busqueda) && empty($filtro_genero)): ?>
+<?php if (!empty($obras_destacadas)): ?>
 <div id="heroCarousel" class="carousel slide mb-5 shadow-sm" data-bs-ride="carousel">
     <div class="carousel-indicators">
         <?php foreach($obras_destacadas as $i => $obra): ?>
@@ -110,48 +131,42 @@ $resNuevos = $conn->query($sqlNuevos);
 
 <main class="container py-4">
 
-    <?php if (empty($busqueda) && empty($filtro_genero)): ?>
+    <?php if ($resNuevos && $resNuevos->num_rows > 0): ?>
         <div class="mb-5">
             <div class="d-flex align-items-center mb-3">
                 <h3 class="fw-bold mb-0 me-2"><i class="fas fa-bolt text-warning"></i> Novedades de la Semana</h3>
                 <span class="badge bg-danger">NEW</span>
             </div>
 
-            <?php if ($resNuevos->num_rows > 0): ?>
-                <div class="d-flex gap-3 overflow-auto pb-3" style="scrollbar-width: thin;">
-                    <?php while($cap = $resNuevos->fetch_assoc()): ?>
-                        <?php $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-'; ?>
-                        
-                        <div class="card shadow-sm border-0 flex-shrink-0" style="width: 160px;">
-                            <a href="visor.php?capId=<?php echo $cap['cap_id']; ?>&obraId=<?php echo $cap['obra_id']; ?>" class="text-decoration-none text-dark">
-                                <div class="position-relative">
-                                    <img src="<?php echo $cap['portada']; ?>" class="card-img-top" style="height: 220px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
-                                    <span class="position-absolute top-0 end-0 badge bg-danger m-1 shadow-sm">UP</span>
-                                    
-                                    <span class="position-absolute bottom-0 start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center">
-                                        <i class="fas fa-star text-warning me-1" style="font-size: 0.65rem;"></i> <?php echo $nota_nov; ?>
-                                    </span>
-                                </div>
-                                <div class="card-body p-2">
-                                    <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;" title="<?php echo $cap['obra_titulo']; ?>">
-                                        <?php echo $cap['obra_titulo']; ?>
-                                    </h6>
-                                    <p class="text-primary small mb-1 text-truncate fw-bold">
-                                        <?php echo $cap['cap_titulo']; ?>
-                                    </p>
-                                    <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                        <i class="far fa-clock me-1"></i><?php echo tiempo_transcurrido($cap['fecha_subida']); ?>
-                                    </small>
-                                </div>
-                            </a>
-                        </div>
-                    <?php endwhile; ?>
-                </div>
-            <?php else: ?>
-                <div class="alert alert-light border text-muted small">
-                    <i class="fas fa-coffee me-2"></i> No se han subido capítulos en los últimos 7 días.
-                </div>
-            <?php endif; ?>
+            <div class="d-flex gap-3 overflow-auto pb-3" style="scrollbar-width: thin;">
+                <?php while($cap = $resNuevos->fetch_assoc()): ?>
+                    <?php $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-'; ?>
+                    
+                    <div class="card shadow-sm border-0 flex-shrink-0" style="width: 160px;">
+                        <a href="visor.php?capId=<?php echo $cap['cap_id']; ?>&obraId=<?php echo $cap['obra_id']; ?>" class="text-decoration-none text-dark">
+                            <div class="position-relative">
+                                <img src="<?php echo $cap['portada']; ?>" class="card-img-top" style="height: 220px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
+                                <span class="position-absolute top-0 end-0 badge bg-danger m-1 shadow-sm">UP</span>
+                                
+                                <span class="position-absolute bottom-0 start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center">
+                                    <i class="fas fa-star text-warning me-1" style="font-size: 0.65rem;"></i> <?php echo $nota_nov; ?>
+                                </span>
+                            </div>
+                            <div class="card-body p-2">
+                                <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;" title="<?php echo $cap['obra_titulo']; ?>">
+                                    <?php echo $cap['obra_titulo']; ?>
+                                </h6>
+                                <p class="text-primary small mb-1 text-truncate fw-bold">
+                                    <?php echo $cap['cap_titulo']; ?>
+                                </p>
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                    <i class="far fa-clock me-1"></i><?php echo tiempo_transcurrido($cap['fecha_subida']); ?>
+                                </small>
+                            </div>
+                        </a>
+                    </div>
+                <?php endwhile; ?>
+            </div>
         </div>
     <?php endif; ?>
 
@@ -215,6 +230,33 @@ $resNuevos = $conn->query($sqlNuevos);
                 </div>
             <?php endwhile; ?>
         </div>
+
+        <?php if ($total_paginas > 1): ?>
+            <nav aria-label="Paginación del catálogo" class="mt-4 mb-5">
+                <ul class="pagination justify-content-center">
+                    
+                    <li class="page-item <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">
+                        <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . ($pagina_actual - 1); ?>">
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </a>
+                    </li>
+                    
+                    <?php for($i = 1; $i <= $total_paginas; $i++): ?>
+                        <li class="page-item <?php echo ($pagina_actual == $i) ? 'active' : ''; ?>">
+                            <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . $i; ?>"><?php echo $i; ?></a>
+                        </li>
+                    <?php endfor; ?>
+                    
+                    <li class="page-item <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">
+                        <a class="page-link shadow-sm" href="<?php echo $url_base . 'pagina=' . ($pagina_actual + 1); ?>">
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                    
+                </ul>
+            </nav>
+        <?php endif; ?>
+
     <?php else: ?>
         <div class="text-center py-5 bg-light rounded-3 border">
             <i class="fas fa-search fa-3x text-muted mb-3 opacity-50"></i>
@@ -227,7 +269,7 @@ $resNuevos = $conn->query($sqlNuevos);
 </main>
 
 <style>
-    body { background-color: #fbfbfb; } /* Fondo ligerísimamente gris para que las tarjetas blancas resalten */
+    body { background-color: #fbfbfb; } 
     .hover-effect { 
         transition: transform 0.2s ease, box-shadow 0.2s ease; 
         border-radius: 8px;

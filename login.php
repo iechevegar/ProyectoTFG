@@ -101,8 +101,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         <div class="mt-3 text-start p-2 bg-light rounded border" style="font-size: 0.75rem; color: #666;">
             <strong>Usuarios Test:</strong><br>
-            • Admin / admin<br>
-            • Lector / lector
+            • Administrador / admin<br>
+            • Lector1 / lector
         </div>
     </div>
 

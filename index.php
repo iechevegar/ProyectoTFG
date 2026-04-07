@@ -2,7 +2,6 @@
 session_start();
 require 'includes/db.php';
 
-// FUNCIÓN AUXILIAR: Formato "Hace X tiempo"
 function tiempo_transcurrido($fecha) {
     $timestamp = strtotime($fecha);
     $diferencia = time() - $timestamp;
@@ -14,16 +13,13 @@ function tiempo_transcurrido($fecha) {
     return date("d/m/Y", $timestamp);
 }
 
-// 1. VARIABLES DE BÚSQUEDA Y PAGINACIÓN
 $busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
 $filtro_genero = isset($_GET['genero']) ? $conn->real_escape_string($_GET['genero']) : '';
 
-// Configuración de la paginación
 $resultados_por_pagina = 10; 
 $pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
 $offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
-// 2. CONSTRUIR LA CONDICIÓN SQL BASE (Para contar y buscar)
 $condicion_sql = "WHERE 1=1";
 if (!empty($busqueda)) {
     $condicion_sql .= " AND (titulo LIKE '%$busqueda%' OR autor LIKE '%$busqueda%' OR generos LIKE '%$busqueda%')";
@@ -32,13 +28,12 @@ if (!empty($filtro_genero)) {
     $condicion_sql .= " AND generos LIKE '%$filtro_genero%'";
 }
 
-// 3. CALCULAR EL TOTAL DE PÁGINAS
 $sqlTotal = "SELECT COUNT(id) as total FROM obras " . $condicion_sql;
 $resTotal = $conn->query($sqlTotal);
 $total_registros = $resTotal->fetch_assoc()['total'];
 $total_paginas = ceil($total_registros / $resultados_por_pagina);
 
-// 4. OBTENER LAS OBRAS DE ESTA PÁGINA ESPECÍFICA
+// Como hacemos SELECT o.* , ya nos traemos la columna "slug" automáticamente
 $sql = "SELECT o.*, 
         (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
         FROM obras o 
@@ -47,12 +42,10 @@ $sql = "SELECT o.*,
         LIMIT $resultados_por_pagina OFFSET $offset"; 
 $resultado = $conn->query($sql);
 
-// 5. OBRAS DESTACADAS Y NOVEDADES (Solo se ven en la página 1 y sin filtros)
 $obras_destacadas = [];
 $resNuevos = null;
 
 if (empty($busqueda) && empty($filtro_genero) && $pagina_actual === 1) {
-    // Carrusel
     $resDest = $conn->query("SELECT o.*, 
                              (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media 
                              FROM obras o ORDER BY RAND() LIMIT 3");
@@ -60,9 +53,9 @@ if (empty($busqueda) && empty($filtro_genero) && $pagina_actual === 1) {
         $obras_destacadas[] = $row;
     }
 
-    // Últimos 7 días
-    $sqlNuevos = "SELECT c.id as cap_id, c.titulo as cap_titulo, c.fecha_subida, 
-                         o.id as obra_id, o.titulo as obra_titulo, o.portada,
+    // Modificamos esta consulta para traernos también el slug de la obra y del capítulo
+    $sqlNuevos = "SELECT c.id as cap_id, c.slug as cap_slug, c.titulo as cap_titulo, c.fecha_subida, 
+                         o.id as obra_id, o.slug as obra_slug, o.titulo as obra_titulo, o.portada,
                          (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media
                   FROM capitulos c
                   JOIN obras o ON c.obra_id = o.id
@@ -71,10 +64,9 @@ if (empty($busqueda) && empty($filtro_genero) && $pagina_actual === 1) {
     $resNuevos = $conn->query($sqlNuevos);
 }
 
-// PREPARAR URL PARA LOS BOTONES DE PAGINACIÓN (Mantiene la búsqueda activa)
 $parametros_url = $_GET;
-unset($parametros_url['pagina']); // Quitamos la página actual para reemplazarla luego
-$url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
+unset($parametros_url['pagina']); 
+$url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -88,30 +80,34 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
     </div>
     <div class="carousel-inner">
         <?php foreach($obras_destacadas as $index => $obra): ?>
-            <?php $nota_carrusel = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; ?>
+            <?php 
+                $nota_carrusel = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; 
+                // Aseguramos ruta absoluta o link externo para la portada
+                $imgPortadaDest = (strpos($obra['portada'], 'http') === 0) ? $obra['portada'] : '/' . ltrim($obra['portada'], '/');
+            ?>
             
             <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?>" style="height: 450px; background-color: #111;">
                 <div style="position: absolute; top:0; left:0; width:100%; height:100%; 
-                            background: url('<?php echo $obra['portada']; ?>') center/cover; 
+                            background: url('<?php echo htmlspecialchars($imgPortadaDest); ?>') center/cover; 
                             filter: blur(8px) brightness(0.3);">
                 </div>
                 <div class="container position-relative h-100 d-flex align-items-center justify-content-center">
                     <div class="row w-100 align-items-center">
                         <div class="col-md-4 text-center d-none d-md-block">
-                            <img src="<?php echo $obra['portada']; ?>" class="rounded shadow-lg" 
+                            <img src="<?php echo htmlspecialchars($imgPortadaDest); ?>" class="rounded shadow-lg" 
                                  style="max-height: 350px; border: 3px solid rgba(255,255,255,0.2); transform: rotate(-3deg);">
                         </div>
                         <div class="col-md-8 text-white p-4">
                             <span class="badge bg-warning text-dark mb-3 text-uppercase fw-bold">Recomendado</span>
-                            <h1 class="display-4 fw-bold mb-2"><?php echo $obra['titulo']; ?></h1>
+                            <h1 class="display-4 fw-bold mb-2"><?php echo htmlspecialchars($obra['titulo']); ?></h1>
                             
                             <div class="d-flex align-items-center mb-3">
                                 <span class="text-warning fs-5 me-2"><i class="fas fa-star"></i></span>
                                 <span class="fw-bold fs-5 text-white"><?php echo $nota_carrusel; ?> <small class="text-white-50 fs-6 fw-normal">/ 5</small></span>
-                                <span class="ms-3 text-light opacity-75">por <?php echo $obra['autor']; ?></span>
+                                <span class="ms-3 text-light opacity-75">por <?php echo htmlspecialchars($obra['autor']); ?></span>
                             </div>
                             
-                            <a href="detalle.php?id=<?php echo $obra['id']; ?>" class="btn btn-primary btn-lg rounded-pill px-5 shadow mt-2">
+                            <a href="/obra/<?php echo urlencode($obra['slug']); ?>" class="btn btn-primary btn-lg rounded-pill px-5 shadow mt-2">
                                 <i class="fas fa-book-reader me-2"></i>Leer Ahora
                             </a>
                         </div>
@@ -140,12 +136,16 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
 
             <div class="d-flex gap-3 overflow-auto pb-3" style="scrollbar-width: thin;">
                 <?php while($cap = $resNuevos->fetch_assoc()): ?>
-                    <?php $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-'; ?>
+                    <?php 
+                        $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-'; 
+                        // Rutas absolutas para Novedades
+                        $imgPortadaNov = (strpos($cap['portada'], 'http') === 0) ? $cap['portada'] : '/' . ltrim($cap['portada'], '/');
+                    ?>
                     
                     <div class="card shadow-sm border-0 flex-shrink-0" style="width: 160px;">
-                        <a href="visor.php?capId=<?php echo $cap['cap_id']; ?>&obraId=<?php echo $cap['obra_id']; ?>" class="text-decoration-none text-dark">
+                        <a href="/obra/<?php echo urlencode($cap['obra_slug']); ?>/<?php echo urlencode($cap['cap_slug']); ?>" class="text-decoration-none text-dark">
                             <div class="position-relative">
-                                <img src="<?php echo $cap['portada']; ?>" class="card-img-top" style="height: 220px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
+                                <img src="<?php echo htmlspecialchars($imgPortadaNov); ?>" class="card-img-top" style="height: 220px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
                                 <span class="position-absolute top-0 end-0 badge bg-danger m-1 shadow-sm">UP</span>
                                 
                                 <span class="position-absolute bottom-0 start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center">
@@ -153,11 +153,11 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
                                 </span>
                             </div>
                             <div class="card-body p-2">
-                                <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;" title="<?php echo $cap['obra_titulo']; ?>">
-                                    <?php echo $cap['obra_titulo']; ?>
+                                <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;" title="<?php echo htmlspecialchars($cap['obra_titulo']); ?>">
+                                    <?php echo htmlspecialchars($cap['obra_titulo']); ?>
                                 </h6>
                                 <p class="text-primary small mb-1 text-truncate fw-bold">
-                                    <?php echo $cap['cap_titulo']; ?>
+                                    <?php echo htmlspecialchars($cap['cap_titulo']); ?>
                                 </p>
                                 <small class="text-muted d-block" style="font-size: 0.75rem;">
                                     <i class="far fa-clock me-1"></i><?php echo tiempo_transcurrido($cap['fecha_subida']); ?>
@@ -184,13 +184,13 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
                 <i class="fas fa-filter me-1"></i> Géneros
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                <li><a class="dropdown-item" href="index.php">Ver Todo</a></li>
+                <li><a class="dropdown-item" href="/">Ver Todo</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="index.php?genero=Acción">Acción</a></li>
-                <li><a class="dropdown-item" href="index.php?genero=Aventura">Aventura</a></li>
-                <li><a class="dropdown-item" href="index.php?genero=Fantasía">Fantasía</a></li>
-                <li><a class="dropdown-item" href="index.php?genero=Romance">Romance</a></li>
-                <li><a class="dropdown-item" href="index.php?genero=Drama">Drama</a></li>
+                <li><a class="dropdown-item" href="/?genero=Acción">Acción</a></li>
+                <li><a class="dropdown-item" href="/?genero=Aventura">Aventura</a></li>
+                <li><a class="dropdown-item" href="/?genero=Fantasía">Fantasía</a></li>
+                <li><a class="dropdown-item" href="/?genero=Romance">Romance</a></li>
+                <li><a class="dropdown-item" href="/?genero=Drama">Drama</a></li>
             </ul>
         </div>
     </div>
@@ -198,13 +198,17 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
     <?php if ($resultado->num_rows > 0): ?>
         <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-4 mb-5">
             <?php while($obra = $resultado->fetch_assoc()): ?>
-                <?php $nota_cat = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; ?>
+                <?php 
+                    $nota_cat = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-'; 
+                    // Rutas absolutas para el catálogo general
+                    $imgPortadaCat = (strpos($obra['portada'], 'http') === 0) ? $obra['portada'] : '/' . ltrim($obra['portada'], '/');
+                ?>
                 
                 <div class="col">
-                    <a href="detalle.php?id=<?php echo $obra['id']; ?>" class="text-decoration-none text-dark">
+                    <a href="/obra/<?php echo urlencode($obra['slug']); ?>" class="text-decoration-none text-dark">
                         <div class="card h-100 shadow-sm border hover-effect overflow-hidden bg-white">
                             <div class="position-relative" style="padding-top: 145%;">
-                                <img src="<?php echo $obra['portada']; ?>" 
+                                <img src="<?php echo htmlspecialchars($imgPortadaCat); ?>" 
                                      class="position-absolute top-0 start-0 w-100 h-100 zoom-img" 
                                      style="object-fit: cover; border-bottom: 1px solid #eee;" 
                                      alt="Portada">
@@ -212,8 +216,8 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
                             
                             <div class="card-body p-2 d-flex flex-column justify-content-between">
                                 <div class="d-flex justify-content-between align-items-start mb-1">
-                                    <h6 class="card-title fw-bold text-truncate mb-0 text-dark pe-1" title="<?php echo $obra['titulo']; ?>" style="max-width: 75%;">
-                                        <?php echo $obra['titulo']; ?>
+                                    <h6 class="card-title fw-bold text-truncate mb-0 text-dark pe-1" title="<?php echo htmlspecialchars($obra['titulo']); ?>" style="max-width: 75%;">
+                                        <?php echo htmlspecialchars($obra['titulo']); ?>
                                     </h6>
                                     
                                     <div class="bg-light border rounded px-1 d-flex align-items-center flex-shrink-0 text-dark" style="font-size: 0.75rem;">
@@ -222,7 +226,7 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
                                 </div>
                                 
                                 <small class="text-muted d-block text-truncate">
-                                    <?php echo $obra['autor']; ?>
+                                    <?php echo htmlspecialchars($obra['autor']); ?>
                                 </small>
                             </div>
                         </div>
@@ -262,7 +266,7 @@ $url_base = "index.php?" . http_build_query($parametros_url) . (empty($parametro
             <i class="fas fa-search fa-3x text-muted mb-3 opacity-50"></i>
             <h3 class="fw-bold text-secondary">No encontramos obras.</h3>
             <p class="text-muted">Prueba a buscar con otro nombre o género.</p>
-            <a href="index.php" class="btn btn-primary mt-2 fw-bold">Ver todo el catálogo</a>
+            <a href="/" class="btn btn-primary mt-2 fw-bold">Ver todo el catálogo</a>
         </div>
     <?php endif; ?>
 

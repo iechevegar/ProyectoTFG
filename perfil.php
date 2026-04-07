@@ -27,30 +27,57 @@ $stmt->execute();
 $usuario = $stmt->get_result()->fetch_assoc();
 $userId = $usuario['id'];
 
-// 2. PROCESAR FORMULARIOS (Configuración)
+// 2. PROCESAR FORMULARIOS (Configuración Segura)
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $active_tab = 'config'; // Mantenernos en la pestaña de config si enviamos formulario
+    $active_tab = 'config';
 
-    // --- SUBIR FOTO ---
+    // --- SUBIR FOTO (3 CAPAS DE SEGURIDAD) ---
     if (isset($_FILES['foto_perfil']) && $_FILES['foto_perfil']['error'] === 0) {
-        $nombre_archivo = "user_" . $userId . "_" . time() . ".jpg";
-        $ruta_destino = "assets/img/avatars/" . $nombre_archivo;
-        
-        $check = getimagesize($_FILES['foto_perfil']['tmp_name']);
-        if ($check !== false) {
-            if (move_uploaded_file($_FILES['foto_perfil']['tmp_name'], $ruta_destino)) {
-                $stmtFoto = $conn->prepare("UPDATE usuarios SET foto = ? WHERE id = ?");
-                $stmtFoto->bind_param("si", $ruta_destino, $userId);
-                if ($stmtFoto->execute()) {
-                    $_SESSION['foto'] = $ruta_destino;
-                    $usuario['foto'] = $ruta_destino;
-                    $mensaje = "Foto actualizada.";
-                    $tipo_mensaje = "success";
-                }
-            }
-        } else {
-            $mensaje = "Archivo no válido.";
+        $file_tmp = $_FILES['foto_perfil']['tmp_name'];
+        $file_name = $_FILES['foto_perfil']['name'];
+        $file_size = $_FILES['foto_perfil']['size'];
+
+        // CAPA 1: Limitar tamaño a 2MB
+        $max_size = 2 * 1024 * 1024; 
+
+        if ($file_size > $max_size) {
+            $mensaje = "El archivo es demasiado grande (Máximo 2MB).";
             $tipo_mensaje = "danger";
+        } else {
+            // CAPA 2: Validar extensión lógica
+            $allowed_exts = ['jpg', 'jpeg', 'png', 'webp'];
+            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
+            // CAPA 3: Validar MIME Type real (ADN del archivo)
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime_type = finfo_file($finfo, $file_tmp);
+            finfo_close($finfo);
+            
+            $allowed_mimes = ['image/jpeg', 'image/png', 'image/webp'];
+
+            // Si pasa las capas de seguridad...
+            if (in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
+                // Renombramos de forma segura manteniendo su extensión real
+                $nombre_archivo = "user_" . $userId . "_" . time() . "." . $file_ext;
+                $ruta_destino = "assets/img/avatars/" . $nombre_archivo;
+                
+                if (move_uploaded_file($file_tmp, $ruta_destino)) {
+                    $stmtFoto = $conn->prepare("UPDATE usuarios SET foto = ? WHERE id = ?");
+                    $stmtFoto->bind_param("si", $ruta_destino, $userId);
+                    if ($stmtFoto->execute()) {
+                        $_SESSION['foto'] = $ruta_destino;
+                        $usuario['foto'] = $ruta_destino;
+                        $mensaje = "Foto de perfil actualizada de forma segura.";
+                        $tipo_mensaje = "success";
+                    }
+                } else {
+                    $mensaje = "Error físico en el servidor al guardar la imagen.";
+                    $tipo_mensaje = "danger";
+                }
+            } else {
+                $mensaje = "Formato no permitido. Por seguridad, solo se aceptan imágenes JPG, PNG o WEBP.";
+                $tipo_mensaje = "danger";
+            }
         }
     }
 
@@ -62,16 +89,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if (password_verify($pass_actual, $usuario['password']) || $pass_actual === $usuario['password']) {
             if ($pass_nueva === $pass_confirm) {
-                if (strlen($pass_nueva) >= 4) {
+                // Mejora: Subimos la seguridad a 6 caracteres mínimos
+                if (strlen($pass_nueva) >= 6) {
                     $nuevo_hash = password_hash($pass_nueva, PASSWORD_DEFAULT);
                     $stmtUp = $conn->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
                     $stmtUp->bind_param("si", $nuevo_hash, $userId);
                     if ($stmtUp->execute()) {
-                        $mensaje = "Contraseña actualizada.";
+                        $mensaje = "Contraseña actualizada correctamente.";
                         $tipo_mensaje = "success";
                     }
                 } else {
-                    $mensaje = "Mínimo 4 caracteres.";
+                    $mensaje = "Por seguridad, la contraseña debe tener al menos 6 caracteres.";
                     $tipo_mensaje = "danger";
                 }
             } else {
@@ -85,7 +113,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-// 3. CONSULTAS PARA EL HISTORIAL (Limitamos a los últimos 10 de cada para no saturar)
+// 3. CONSULTAS PARA EL HISTORIAL (Limitamos a los últimos 10)
 
 // A. Comentarios en Capítulos
 $sqlCom = "SELECT c.texto, c.fecha, cap.id as cap_id, cap.titulo as cap_titulo, o.id as obra_id, o.titulo as obra_titulo 
@@ -167,9 +195,9 @@ $mis_respuestas_foro = $conn->query($sqlRespuestas);
                         <div class="card-header bg-white fw-bold">Actualizar Datos</div>
                         <div class="card-body">
                             <form method="POST" enctype="multipart/form-data" class="mb-4 pb-3 border-bottom">
-                                <label class="form-label small fw-bold">Cambiar Foto</label>
+                                <label class="form-label small fw-bold">Cambiar Foto (Max 2MB)</label>
                                 <div class="input-group">
-                                    <input type="file" name="foto_perfil" class="form-control" required>
+                                    <input type="file" name="foto_perfil" class="form-control" accept=".jpg,.jpeg,.png,.webp" required>
                                     <button class="btn btn-outline-primary" type="submit">Subir</button>
                                 </div>
                             </form>
@@ -180,7 +208,7 @@ $mis_respuestas_foro = $conn->query($sqlRespuestas);
                                     <input type="password" name="pass_actual" class="form-control form-control-sm" placeholder="Actual" required>
                                 </div>
                                 <div class="mb-2">
-                                    <input type="password" name="pass_nueva" class="form-control form-control-sm" placeholder="Nueva" required>
+                                    <input type="password" name="pass_nueva" class="form-control form-control-sm" placeholder="Nueva (Mín. 6 caracteres)" required>
                                 </div>
                                 <div class="mb-3">
                                     <input type="password" name="pass_confirm" class="form-control form-control-sm" placeholder="Repetir Nueva" required>
@@ -198,10 +226,13 @@ $mis_respuestas_foro = $conn->query($sqlRespuestas);
                         <div class="card-header bg-danger text-white fw-bold">Zona de Peligro</div>
                         <div class="card-body">
                             <p class="small text-muted">Si eliminas tu cuenta, se borrarán todos tus datos, favoritos, comentarios y participación en el foro de forma permanente.</p>
-                            <a href="borrar_cuenta.php" class="btn btn-outline-danger w-100" 
-                               onclick="return confirm('¿Estás SEGURO? No hay vuelta atrás.');">
-                                Eliminar Cuenta Permanentemente
-                            </a>
+                            
+                            <form action="borrar_cuenta.php" method="POST" onsubmit="return confirm('¿Estás COMPLETAMENTE SEGURO? No hay vuelta atrás.');">
+                                <button type="submit" class="btn btn-outline-danger w-100 fw-bold">
+                                    <i class="fas fa-user-slash me-2"></i>Eliminar Cuenta Permanentemente
+                                </button>
+                            </form>
+                            
                         </div>
                     </div>
                 </div>

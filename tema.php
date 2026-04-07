@@ -2,64 +2,91 @@
 session_start();
 require 'includes/db.php';
 
-// Validar ID del tema
 if (!isset($_GET['id'])) {
     header("Location: foro.php");
     exit();
 }
 
 $idTema = intval($_GET['id']);
+$resultados_por_pagina = 10; 
+
+// --- 1. COMPROBAR ESTADO DEL USUARIO Y SUSPENSIÓN ---
+$estaSuspendido = false;
+$fechaDesbloqueoStr = '';
+$userId = null;
+
+if (isset($_SESSION['usuario'])) {
+    $nombreUser = $_SESSION['usuario'];
+    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
+    if ($resUser && $resUser->num_rows > 0) {
+        $userData = $resUser->fetch_assoc();
+        $userId = $userData['id']; 
+        
+        // Verificamos si la fecha de desbloqueo es mayor a la actual
+        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
+            $estaSuspendido = true;
+            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
+        }
+    }
+}
+// ----------------------------------------------------
+
 
 // ---------------------------------------------------------
-// 1. LÓGICA DE POST Y ACCIONES
+// 2. LÓGICA DE POST Y ACCIONES SEGURAS
 // ---------------------------------------------------------
-
-// A. PROCESAR NUEVA RESPUESTA
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['respuesta'])) {
-    if (isset($_SESSION['usuario'])) {
-        $mensaje = trim($_POST['respuesta']);
-        if (!empty($mensaje)) {
-            // Obtener ID usuario actual
-            $nombreUser = $_SESSION['usuario'];
-            $resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
-            $userId = $resUser->fetch_assoc()['id'];
-
-            // Insertar respuesta
-            $stmt = $conn->prepare("INSERT INTO foro_respuestas (tema_id, usuario_id, mensaje) VALUES (?, ?, ?)");
-            $stmt->bind_param("iis", $idTema, $userId, $mensaje);
-            $stmt->execute();
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    
+    // A. PROCESAR NUEVA RESPUESTA
+    if (isset($_POST['respuesta'])) {
+        if ($userId) {
             
-            // Recargar página para ver la respuesta
-            header("Location: tema.php?id=$idTema");
+            // DEFENSA BACKEND: Si está suspendido, no procesamos la respuesta
+            if ($estaSuspendido) {
+                header("Location: tema.php?id=$idTema");
+                exit();
+            }
+
+            $mensaje = trim($_POST['respuesta']);
+            if (!empty($mensaje)) {
+                $stmt = $conn->prepare("INSERT INTO foro_respuestas (tema_id, usuario_id, mensaje) VALUES (?, ?, ?)");
+                $stmt->bind_param("iis", $idTema, $userId, $mensaje);
+                $stmt->execute();
+                
+                // UX MAGIA: Redirigir a la última página al comentar
+                $sqlCount = "SELECT COUNT(id) as total FROM foro_respuestas WHERE tema_id = $idTema";
+                $total_resp = $conn->query($sqlCount)->fetch_assoc()['total'];
+                $ultima_pagina = max(1, ceil($total_resp / $resultados_por_pagina));
+                
+                header("Location: tema.php?id=$idTema&pagina=$ultima_pagina");
+                exit();
+            }
+        } else {
+            header("Location: login.php");
             exit();
         }
-    } else {
-        header("Location: login.php");
+    }
+    
+    // B. BORRAR TEMA (Solo Admin - Seguro Anti-CSRF)
+    if (isset($_POST['borrar_tema']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        $conn->query("DELETE FROM foro_temas WHERE id = $idTema");
+        header("Location: foro.php");
+        exit();
+    }
+
+    // C. BORRAR RESPUESTA (Solo Admin - Seguro Anti-CSRF)
+    if (isset($_POST['borrar_resp']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        $idResp = intval($_POST['borrar_resp']);
+        $conn->query("DELETE FROM foro_respuestas WHERE id = $idResp");
+        header("Location: tema.php?id=$idTema");
         exit();
     }
 }
 
-// B. BORRAR TEMA (Solo Admin)
-if (isset($_GET['borrar_tema']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
-    // Al borrar el tema, se borran las respuestas en cascada (según tu DB)
-    $conn->query("DELETE FROM foro_temas WHERE id = $idTema");
-    header("Location: foro.php");
-    exit();
-}
-
-// C. BORRAR RESPUESTA (Solo Admin)
-if (isset($_GET['borrar_resp']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
-    $idResp = intval($_GET['borrar_resp']);
-    $conn->query("DELETE FROM foro_respuestas WHERE id = $idResp");
-    header("Location: tema.php?id=$idTema");
-    exit();
-}
-
 // ---------------------------------------------------------
-// 2. CONSULTAS DE DATOS
+// 3. CONSULTAS DE DATOS Y PAGINACIÓN
 // ---------------------------------------------------------
 
-// A. OBTENER DATOS DEL TEMA PRINCIPAL
 $sqlTema = "SELECT t.*, u.nombre, u.foto, u.rol 
             FROM foro_temas t 
             JOIN usuarios u ON t.usuario_id = u.id 
@@ -68,161 +95,217 @@ $resTema = $conn->query($sqlTema);
 $tema = $resTema->fetch_assoc();
 
 if (!$tema) {
-    echo "<div class='container py-5'><h1>Tema no encontrado o eliminado.</h1><a href='foro.php'>Volver</a></div>";
+    echo "<div class='container py-5 text-center'><h1>Tema no encontrado o eliminado.</h1><a href='foro.php' class='btn btn-primary mt-3'>Volver al Foro</a></div>";
     exit();
 }
 
-// B. OBTENER RESPUESTAS
+$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$offset = ($pagina_actual - 1) * $resultados_por_pagina;
+
+$sqlTotalResp = "SELECT COUNT(id) as total FROM foro_respuestas WHERE tema_id = $idTema";
+$resTotalResp = $conn->query($sqlTotalResp);
+$total_registros = $resTotalResp->fetch_assoc()['total'];
+$total_paginas = ceil($total_registros / $resultados_por_pagina);
+
 $sqlResp = "SELECT r.*, u.nombre, u.foto, u.rol 
             FROM foro_respuestas r 
             JOIN usuarios u ON r.usuario_id = u.id 
             WHERE r.tema_id = $idTema 
-            ORDER BY r.fecha ASC";
+            ORDER BY r.fecha ASC 
+            LIMIT $resultados_por_pagina OFFSET $offset";
 $respuestas = $conn->query($sqlResp);
 ?>
 
 <?php include 'includes/header.php'; ?>
 
-<main class="container py-5">
+<main class="container py-5" style="max-width: 900px;">
     
     <div class="mb-3">
-        <a href="foro.php" class="text-decoration-none text-muted">
-            <i class="fas fa-arrow-left"></i> Volver al Foro
+        <a href="foro.php" class="text-decoration-none text-muted fw-bold">
+            <i class="fas fa-arrow-left me-1"></i> Volver al Foro
         </a>
     </div>
 
-    <div class="card shadow-sm mb-4 border-primary">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-            <div>
-                <span class="badge bg-secondary mb-1"><?php echo htmlspecialchars($tema['categoria']); ?></span>
-                <h3 class="mb-0 text-primary fw-bold"><?php echo htmlspecialchars($tema['titulo']); ?></h3>
+    <?php if($pagina_actual === 1): ?>
+        <div class="card shadow-sm mb-4 border-primary">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <span class="badge bg-secondary mb-1"><?php echo htmlspecialchars($tema['categoria']); ?></span>
+                    <h3 class="mb-0 text-primary fw-bold"><?php echo htmlspecialchars($tema['titulo']); ?></h3>
+                </div>
+                
+                <?php if(isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
+                    <form method="POST" class="d-inline" onsubmit="return confirm('¿Estás seguro de borrar TODO este hilo?');">
+                        <input type="hidden" name="borrar_tema" value="1">
+                        <button type="submit" class="btn btn-sm btn-danger shadow-sm">
+                            <i class="fas fa-trash-alt me-1"></i> Borrar Hilo
+                        </button>
+                    </form>
+                <?php endif; ?>
             </div>
             
-            <?php if(isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
-                <a href="tema.php?id=<?php echo $idTema; ?>&borrar_tema=1" 
-                   class="btn btn-sm btn-danger" onclick="return confirm('¿Estás seguro de borrar TODO este hilo?');">
-                    <i class="fas fa-trash-alt me-1"></i> Borrar Hilo
-                </a>
-            <?php endif; ?>
-        </div>
-        
-        <div class="card-body">
-            <div class="d-flex mb-3 align-items-center border-bottom pb-3">
-                <?php $foto = !empty($tema['foto']) ? $tema['foto'] : 'https://via.placeholder.com/50'; ?>
-                <img src="<?php echo $foto; ?>" class="rounded-circle me-3" width="50" height="50" style="object-fit:cover;">
-                <div>
-                    <strong class="d-block text-dark">
-                        <?php echo htmlspecialchars($tema['nombre']); ?> 
-                        <?php if($tema['rol'] === 'admin'): ?>
-                            <span class="badge bg-danger" style="font-size:0.7em">ADMIN</span>
-                        <?php endif; ?>
-                    </strong>
-                    
-                    <div class="text-muted small">
-                        Publicado el <?php echo date('d/m/Y H:i', strtotime($tema['fecha'])); ?>
+            <div class="card-body">
+                <div class="d-flex mb-3 align-items-center border-bottom pb-3">
+                    <?php $foto = !empty($tema['foto']) ? $tema['foto'] : 'https://via.placeholder.com/50'; ?>
+                    <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle me-3 border" width="50" height="50" style="object-fit:cover;">
+                    <div>
+                        <strong class="d-block text-dark fs-5">
+                            <?php echo htmlspecialchars($tema['nombre']); ?> 
+                            <?php if($tema['rol'] === 'admin'): ?>
+                                <span class="badge bg-danger ms-1" style="font-size:0.6em">ADMIN</span>
+                            <?php endif; ?>
+                        </strong>
                         
-                        <?php if(!empty($tema['fecha_edicion'])): ?>
-                            <span class="fst-italic ms-2 text-secondary">
-                                (Editado el <?php echo date('d/m/y H:i', strtotime($tema['fecha_edicion'])); ?>)
-                            </span>
-                        <?php endif; ?>
+                        <div class="text-muted small">
+                            <i class="far fa-calendar-alt me-1"></i> Publicado el <?php echo date('d/m/Y H:i', strtotime($tema['fecha'])); ?>
+                            <?php if(!empty($tema['fecha_edicion'])): ?>
+                                <span class="fst-italic ms-2 text-secondary">
+                                    (Editado el <?php echo date('d/m/y H:i', strtotime($tema['fecha_edicion'])); ?>)
+                                </span>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
+                
+                <div class="card-text fs-5 py-2" style="white-space: pre-wrap; color: #333; line-height: 1.6;"><?php echo htmlspecialchars($tema['contenido']); ?></div>
+                
+                <?php if(isset($_SESSION['usuario']) && $_SESSION['usuario'] === $tema['nombre']): ?>
+                    <div class="mt-3 text-end">
+                        <a href="editar_tema.php?id=<?php echo $tema['id']; ?>" class="btn btn-sm btn-outline-secondary fw-bold">
+                            <i class="fas fa-pencil-alt me-1"></i> Editar Tema
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
-            
-            <div class="card-text fs-5 py-2" style="white-space: pre-wrap; color: #333;"><?php echo htmlspecialchars($tema['contenido']); ?></div>
-            
-            <?php if(isset($_SESSION['usuario']) && $_SESSION['usuario'] === $tema['nombre']): ?>
-                <div class="mt-3 text-end">
-                    <a href="editar_tema.php?id=<?php echo $tema['id']; ?>" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-pencil-alt me-1"></i> Editar Tema
-                    </a>
-                </div>
-            <?php endif; ?>
         </div>
-    </div>
+    <?php else: ?>
+        <div class="alert alert-light border border-primary border-start-4 shadow-sm mb-4">
+            <h5 class="mb-0 text-primary fw-bold">
+                <i class="fas fa-comments me-2"></i><?php echo htmlspecialchars($tema['titulo']); ?> 
+                <span class="text-muted fs-6 fw-normal ms-2">(Página <?php echo $pagina_actual; ?>)</span>
+            </h5>
+        </div>
+    <?php endif; ?>
 
-    <h5 class="mb-3 ps-2 border-start border-4 border-secondary">
-        Respuestas <span class="text-muted small">(<?php echo $respuestas->num_rows; ?>)</span>
-    </h5>
+    <div class="d-flex justify-content-between align-items-center border-bottom border-2 border-secondary pb-2 mb-4">
+        <h5 class="mb-0 fw-bold">Respuestas <span class="text-muted fs-6">(<?php echo $total_registros; ?>)</span></h5>
+    </div>
     
     <?php if ($respuestas->num_rows > 0): ?>
         <?php while($resp = $respuestas->fetch_assoc()): ?>
-            <div class="card mb-3 shadow-sm border-0 bg-light">
+            <div class="card mb-3 shadow-sm border-0 bg-white">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
+                    <div class="d-flex justify-content-between align-items-start border-bottom pb-2 mb-2">
                         
-                        <div class="d-flex mb-2 align-items-center">
+                        <div class="d-flex align-items-center">
                             <?php $fotoR = !empty($resp['foto']) ? $resp['foto'] : 'https://via.placeholder.com/40'; ?>
-                            <img src="<?php echo $fotoR; ?>" class="rounded-circle me-3" width="40" height="40" style="object-fit:cover;">
+                            <img src="<?php echo htmlspecialchars($fotoR); ?>" class="rounded-circle me-3 border" width="45" height="45" style="object-fit:cover;">
                             <div>
-                                <span class="fw-bold text-dark">
+                                <span class="fw-bold text-dark fs-6">
                                     <?php echo htmlspecialchars($resp['nombre']); ?>
                                     <?php if($resp['rol'] === 'admin'): ?>
-                                        <span class="badge bg-danger" style="font-size:0.6em">ADMIN</span>
+                                        <span class="badge bg-danger ms-1" style="font-size:0.6em">ADMIN</span>
                                     <?php endif; ?>
                                 </span>
                                 <br>
-                                <small class="text-muted"><?php echo date('d/m/Y H:i', strtotime($resp['fecha'])); ?></small>
+                                <small class="text-muted"><i class="far fa-clock me-1"></i><?php echo date('d/m/Y H:i', strtotime($resp['fecha'])); ?></small>
                             </div>
                         </div>
 
                         <div>
                             <?php if(isset($_SESSION['usuario']) && $_SESSION['usuario'] === $resp['nombre']): ?>
-                                <a href="editar_respuesta.php?id=<?php echo $resp['id']; ?>" class="text-secondary me-2 text-decoration-none" title="Editar">
+                                <a href="editar_respuesta.php?id=<?php echo $resp['id']; ?>" class="btn btn-sm btn-light text-secondary me-1" title="Editar">
                                     <i class="fas fa-pencil-alt"></i>
                                 </a>
                             <?php endif; ?>
 
                             <?php if(isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
-                                <a href="tema.php?id=<?php echo $idTema; ?>&borrar_resp=<?php echo $resp['id']; ?>" 
-                                   class="text-danger" title="Borrar respuesta" 
-                                   onclick="return confirm('¿Borrar esta respuesta permanentemente?');">
-                                    <i class="fas fa-times"></i>
-                                </a>
+                                <form method="POST" class="d-inline" onsubmit="return confirm('¿Borrar esta respuesta permanentemente?');">
+                                    <input type="hidden" name="borrar_resp" value="<?php echo $resp['id']; ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger border-0" title="Borrar respuesta">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
                             <?php endif; ?>
                         </div>
                     </div>
 
-                    <div class="mt-2 ps-5 text-dark">
-                        <?php echo nl2br(htmlspecialchars($resp['mensaje'])); ?>
+                    <div class="text-dark" style="font-size: 1.05rem; line-height: 1.5; white-space: pre-wrap;">
+                        <?php echo htmlspecialchars($resp['mensaje']); ?>
                         
                         <?php if(!empty($resp['fecha_edicion'])): ?>
-                            <small class="text-muted fst-italic ms-2" style="font-size: 0.75rem;">
-                                (Editado)
-                            </small>
+                            <div class="mt-2 text-muted fst-italic" style="font-size: 0.8rem;">
+                                (Editado el <?php echo date('d/m/y H:i', strtotime($resp['fecha_edicion'])); ?>)
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
         <?php endwhile; ?>
     <?php else: ?>
-        <div class="alert alert-light text-center border py-4 text-muted">
-            No hay respuestas aún. ¡Sé el primero en comentar!
+        <div class="alert alert-light text-center border py-5 text-muted shadow-sm rounded-3">
+            <i class="far fa-comment-dots fa-3x mb-3 opacity-25"></i>
+            <h5>No hay respuestas aún</h5>
+            <p class="mb-0">¡Sé el primero en compartir tu opinión!</p>
         </div>
     <?php endif; ?>
 
-    <div class="mt-5">
+    <?php if ($total_paginas > 1): ?>
+        <nav aria-label="Paginación de respuestas" class="mt-4 mb-5">
+            <ul class="pagination justify-content-center">
+                <li class="page-item <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">
+                    <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo ($pagina_actual - 1); ?>">
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </a>
+                </li>
+                
+                <?php for($i = 1; $i <= $total_paginas; $i++): ?>
+                    <li class="page-item <?php echo ($pagina_actual == $i) ? 'active' : ''; ?>">
+                        <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo $i; ?>"><?php echo $i; ?></a>
+                    </li>
+                <?php endfor; ?>
+                
+                <li class="page-item <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">
+                    <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo ($pagina_actual + 1); ?>">
+                        Siguiente <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    <?php endif; ?>
+
+    <div class="mt-4">
         <?php if(isset($_SESSION['usuario'])): ?>
-            <div class="card shadow-sm border-0">
-                <div class="card-body bg-white p-4">
-                    <h5 class="card-title mb-3 fw-bold"><i class="fas fa-reply me-2"></i>Escribir Respuesta</h5>
-                    <form method="POST" action="">
-                        <div class="mb-3">
-                            <textarea name="respuesta" class="form-control bg-light" rows="4" placeholder="Participa en la discusión..." required></textarea>
-                        </div>
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-success px-4 fw-bold">
-                                <i class="fas fa-paper-plane me-2"></i>Enviar Respuesta
-                            </button>
-                        </div>
-                    </form>
+            
+            <?php if($estaSuspendido): ?>
+                <div class="alert alert-danger text-center shadow-sm py-4 border-danger border-top-4">
+                    <i class="fas fa-ban fa-2x mb-3 text-danger opacity-75 d-block"></i>
+                    <h5 class="fw-bold text-danger">Participación Bloqueada</h5>
+                    <span class="fs-6 text-muted">Tu cuenta se encuentra en modo Solo Lectura por infracciones de las normas de la comunidad.</span>
+                    <small class="d-block mt-2 fw-bold text-danger">Podrás volver a participar el: <?php echo $fechaDesbloqueoStr; ?></small>
                 </div>
-            </div>
+            <?php else: ?>
+                <div class="card shadow-sm border-primary border-top-4">
+                    <div class="card-body bg-white p-4">
+                        <h5 class="card-title mb-3 fw-bold"><i class="fas fa-reply text-primary me-2"></i>Participar en la discusión</h5>
+                        <form method="POST" action="">
+                            <div class="mb-3">
+                                <textarea name="respuesta" class="form-control bg-light" rows="4" placeholder="Escribe aquí tu respuesta..." required></textarea>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
+                                    <i class="fas fa-paper-plane me-2"></i>Publicar Respuesta
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
+
         <?php else: ?>
-            <div class="alert alert-warning text-center shadow-sm">
-                <i class="fas fa-lock me-2"></i>
-                Debes <a href="login.php" class="fw-bold text-dark">iniciar sesión</a> para participar en el foro.
+            <div class="alert alert-secondary text-center shadow-sm py-4">
+                <i class="fas fa-lock fa-2x mb-3 text-muted opacity-50 d-block"></i>
+                <span class="fs-5">Debes <a href="login.php" class="fw-bold text-primary text-decoration-none">iniciar sesión</a> para participar.</span>
             </div>
         <?php endif; ?>
     </div>

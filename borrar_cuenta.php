@@ -8,6 +8,15 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
+// --- SEGURIDAD CRÍTICA (ANTI-CSRF) ---
+// Comprobamos que la orden viene obligatoriamente de hacer clic en el botón POST del formulario.
+// Si alguien intenta entrar por URL (GET), la petición se bloquea.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: perfil.php?error=Acción no permitida por seguridad.");
+    exit();
+}
+// -------------------------------------
+
 // Obtener datos del usuario para borrar su foto primero
 $nombreUser = $_SESSION['usuario'];
 $sql = "SELECT id, foto FROM usuarios WHERE nombre = ?";
@@ -37,8 +46,12 @@ if ($user = $res->fetch_assoc()) {
     if ($stmtDelete->execute()) {
         // 3. DESTRUIR SESIÓN
         session_destroy();
-        // Redirigir al login con mensaje
-        header("Location: login.php?msg=Cuenta eliminada correctamente. ¡Te echaremos de menos!");
+        
+        // Iniciamos una sesión temporal solo para pasar el mensaje de éxito al login
+        session_start();
+        $_SESSION['msg_exito'] = "Cuenta eliminada correctamente. ¡Te echaremos de menos!";
+        
+        header("Location: login.php");
         exit();
     } else {
         // Si falla algo

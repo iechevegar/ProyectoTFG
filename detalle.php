@@ -2,50 +2,94 @@
 session_start();
 require 'includes/db.php';
 
-// 1. Validar ID
-if (!isset($_GET['id']) || empty($_GET['id'])) {
-    header("Location: index.php");
+// 1. Validar SLUG en lugar de ID
+if (!isset($_GET['slug']) || empty($_GET['slug'])) {
+    header("Location: /");
     exit();
 }
 
-$idObra = intval($_GET['id']);
+$slug = $_GET['slug'];
+
+// --- OBTENER EL ID DE LA OBRA A PARTIR DEL SLUG ---
+$sql_id = "SELECT id FROM obras WHERE slug = ?";
+$stmt_id = $conn->prepare($sql_id);
+$stmt_id->bind_param("s", $slug);
+$stmt_id->execute();
+$res_id = $stmt_id->get_result();
+
+if ($res_id->num_rows === 0) {
+    // Si escriben una URL inventada (ej. /obra/batman), los mandamos al 404
+    header("Location: /404.php");
+    exit();
+}
+
+$idObra = $res_id->fetch_assoc()['id'];
 $datos_obra = null;
+// --------------------------------------------------
+
+// --- COMPROBAR SI EL USUARIO ESTÁ SUSPENDIDO ---
+$estaSuspendido = false;
+$fechaDesbloqueoStr = '';
+$userId = null;
+
+if (isset($_SESSION['usuario'])) {
+    $nombreUser = $_SESSION['usuario'];
+    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
+    if ($resUser && $resUser->num_rows > 0) {
+        $userData = $resUser->fetch_assoc();
+        $userId = $userData['id']; // Lo guardamos para usarlo luego
+        
+        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
+            $estaSuspendido = true;
+            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
+        }
+    }
+}
+// -----------------------------------------------
 
 // --- CONTADOR DE VISITAS ---
 $conn->query("UPDATE obras SET visitas = visitas + 1 WHERE id = $idObra");
 
 // --- LÓGICA DE RESEÑAS Y PUNTUACIÓN ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['texto_resena'])) {
-    if (isset($_SESSION['usuario'])) {
-        $texto = trim($_POST['texto_resena']);
-        // 1 estrella por defecto si no tocan nada
-        $puntuacion = isset($_POST['puntuacion']) ? intval($_POST['puntuacion']) : 1;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-        if (!empty($texto)) {
-            $nombreUser = $_SESSION['usuario'];
-            $resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
-            $userId = $resUser->fetch_assoc()['id'];
-
-            // Insertamos texto Y puntuación
-            $stmt = $conn->prepare("INSERT INTO resenas (usuario_id, obra_id, texto, puntuacion) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("iisi", $userId, $idObra, $texto, $puntuacion);
-            if ($stmt->execute()) {
-                header("Location: detalle.php?id=$idObra");
+    // A. AÑADIR RESEÑA
+    if (isset($_POST['texto_resena'])) {
+        if (isset($_SESSION['usuario'])) {
+            
+            // DEFENSA BACKEND: Si está suspendido, lo rechazamos
+            if ($estaSuspendido) {
+                header("Location: /obra/$slug");
                 exit();
             }
+
+            $texto = trim($_POST['texto_resena']);
+            // 1 estrella por defecto si no tocan nada
+            $puntuacion = isset($_POST['puntuacion']) ? intval($_POST['puntuacion']) : 1;
+
+            if (!empty($texto) && $userId) {
+                // Insertamos texto Y puntuación
+                $stmt = $conn->prepare("INSERT INTO resenas (usuario_id, obra_id, texto, puntuacion) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("iisi", $userId, $idObra, $texto, $puntuacion);
+                if ($stmt->execute()) {
+                    // Redirigimos a la URL limpia
+                    header("Location: /obra/$slug");
+                    exit();
+                }
+            }
+        } else {
+            header("Location: /login");
+            exit();
         }
-    } else {
-        header("Location: login.php");
+    }
+
+    // B. BORRAR RESEÑA (Solo Admin - Seguridad Anti-CSRF)
+    if (isset($_POST['borrar_resena']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        $idResena = intval($_POST['borrar_resena']);
+        $conn->query("DELETE FROM resenas WHERE id = $idResena");
+        header("Location: /obra/$slug");
         exit();
     }
-}
-
-// BORRAR RESEÑA (Solo Admin)
-if (isset($_GET['borrar_resena']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
-    $idResena = intval($_GET['borrar_resena']);
-    $conn->query("DELETE FROM resenas WHERE id = $idResena");
-    header("Location: detalle.php?id=$idObra");
-    exit();
 }
 
 // --- OBTENER DATOS DE LA OBRA ---
@@ -68,33 +112,26 @@ if ($resultado->num_rows > 0) {
     // Lógica Favoritos y Usuario Logueado
     $es_favorito = false;
     $usuario_logueado = isset($_SESSION['usuario']);
-    // Sacamos el rol para usarlo más adelante
     $rol_usuario = isset($_SESSION['rol']) ? $_SESSION['rol'] : 'invitado';
 
-    if ($usuario_logueado) {
-        $nombreUser = $_SESSION['usuario'];
-        $resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
-        $userRow = $resUser->fetch_assoc();
-        if ($userRow) {
-            $userId = $userRow['id'];
-            $resFav = $conn->query("SELECT id FROM favoritos WHERE usuario_id = $userId AND obra_id = $idObra");
-            if ($resFav->num_rows > 0) {
-                $es_favorito = true;
-            }
-
-            // --- LÓGICA DE CAPÍTULOS LEÍDOS ---
-            $capitulos_leidos = [];
-            $sqlLeidos = "SELECT capitulo_id FROM capitulos_leidos WHERE usuario_id = $userId";
-            $resLeidos = $conn->query($sqlLeidos);
-            while ($row = $resLeidos->fetch_assoc()) {
-                $capitulos_leidos[] = $row['capitulo_id'];
-            }
-            $datos_obra['leidos_por_usuario'] = $capitulos_leidos;
+    if ($usuario_logueado && $userId) {
+        $resFav = $conn->query("SELECT id FROM favoritos WHERE usuario_id = $userId AND obra_id = $idObra");
+        if ($resFav->num_rows > 0) {
+            $es_favorito = true;
         }
+
+        // --- LÓGICA DE CAPÍTULOS LEÍDOS ---
+        $capitulos_leidos = [];
+        $sqlLeidos = "SELECT capitulo_id FROM capitulos_leidos WHERE usuario_id = $userId";
+        $resLeidos = $conn->query($sqlLeidos);
+        while ($row = $resLeidos->fetch_assoc()) {
+            $capitulos_leidos[] = $row['capitulo_id'];
+        }
+        $datos_obra['leidos_por_usuario'] = $capitulos_leidos;
     }
 
     // Obtener Capítulos
-    $resCaps = $conn->query("SELECT id, titulo, fecha_subida FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC");
+    $resCaps = $conn->query("SELECT id, titulo, slug, fecha_subida FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC");
     $capitulos = [];
     while ($cap = $resCaps->fetch_assoc()) {
         $capitulos[] = $cap;
@@ -110,7 +147,7 @@ $sqlResenas = "SELECT r.*, u.nombre, u.foto, u.rol
                ORDER BY r.fecha DESC";
 $lista_resenas = $conn->query($sqlResenas);
 
-// Función auxiliar PHP para dibujar estrellas en los comentarios
+// Función auxiliar PHP para dibujar estrellas
 function pintarEstrellas($nota)
 {
     $html = '';
@@ -128,26 +165,10 @@ include 'includes/header.php';
 ?>
 
 <style>
-    /* Estilos del selector de estrellas */
-    .clasificacion {
-        direction: rtl;
-        unicode-bidi: bidi-override;
-        display: inline-block;
-    }
+    .clasificacion { direction: rtl; unicode-bidi: bidi-override; display: inline-block; }
     .clasificacion input[type="radio"] { display: none; }
-    .clasificacion label {
-        color: #ddd;
-        font-size: 1.8rem;
-        padding: 0 2px;
-        cursor: pointer;
-        transition: color 0.2s;
-    }
-    .clasificacion label:hover,
-    .clasificacion label:hover~label,
-    .clasificacion input[type="radio"]:checked~label {
-        color: #ffc107;
-    }
-    /* Estilos hover capítulos */
+    .clasificacion label { color: #ddd; font-size: 1.8rem; padding: 0 2px; cursor: pointer; transition: color 0.2s; }
+    .clasificacion label:hover, .clasificacion label:hover~label, .clasificacion input[type="radio"]:checked~label { color: #ffc107; }
     .hover-effect-light:hover { background-color: #fbfbfb; }
     .hover-scale { transition: transform 0.2s; display: inline-block; }
     .hover-scale:hover { transform: scale(1.1); }
@@ -156,7 +177,7 @@ include 'includes/header.php';
 <main style="padding-bottom: 4rem; background-color: #ffffff;">
 
     <div class="container mt-3">
-        <a href="index.php" class="text-decoration-none text-muted">
+        <a href="/" class="text-decoration-none text-muted">
             <i class="fas fa-arrow-left"></i> Volver al catálogo
         </a>
     </div>
@@ -174,41 +195,52 @@ include 'includes/header.php';
             <div class="col-12">
 
                 <?php if ($usuario_logueado && $rol_usuario !== 'admin'): ?>
-                    <div class="card mb-4 border shadow-sm">
-                        <div class="card-body p-4">
-                            <form method="POST" action="">
-                                <label class="form-label fw-bold mb-0 text-dark">Deja tu valoración:</label>
-
-                                <div class="d-block mb-1">
-                                    <div class="clasificacion">
-                                        <input id="radio5" type="radio" name="puntuacion" value="5">
-                                        <label for="radio5"><i class="fas fa-star"></i></label>
-                                        <input id="radio4" type="radio" name="puntuacion" value="4">
-                                        <label for="radio4"><i class="fas fa-star"></i></label>
-                                        <input id="radio3" type="radio" name="puntuacion" value="3">
-                                        <label for="radio3"><i class="fas fa-star"></i></label>
-                                        <input id="radio2" type="radio" name="puntuacion" value="2">
-                                        <label for="radio2"><i class="fas fa-star"></i></label>
-                                        <input id="radio1" type="radio" name="puntuacion" value="1" checked>
-                                        <label for="radio1"><i class="fas fa-star"></i></label>
-                                    </div>
-                                </div>
-
-                                <textarea name="texto_resena" class="form-control mb-3" rows="3"
-                                    placeholder="¿Qué te ha parecido la historia?" required></textarea>
-
-                                <div class="d-flex justify-content-between align-items-center flex-wrap">
-                                    <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Sé respetuoso. Evita
-                                        spoilers sin avisar.</small>
-                                    <button type="submit" class="btn btn-primary fw-bold px-4 mt-2 mt-sm-0">Publicar Opinión</button>
-                                </div>
-                            </form>
+                    
+                    <?php if ($estaSuspendido): ?>
+                        <div class="alert alert-danger text-center shadow-sm py-4 border-danger border-top-4 mb-4">
+                            <i class="fas fa-ban fa-2x mb-3 text-danger opacity-75 d-block"></i>
+                            <h5 class="fw-bold text-danger">Participación Bloqueada</h5>
+                            <span class="fs-6 text-muted">Tu cuenta se encuentra en modo Solo Lectura por infracciones.</span>
+                            <small class="d-block mt-2 fw-bold text-danger">Podrás volver a publicar reseñas el: <?php echo $fechaDesbloqueoStr; ?></small>
                         </div>
-                    </div>
+                    <?php else: ?>
+                        <div class="card mb-4 border shadow-sm">
+                            <div class="card-body p-4">
+                                <form method="POST" action="">
+                                    <label class="form-label fw-bold mb-0 text-dark">Deja tu valoración:</label>
+
+                                    <div class="d-block mb-1">
+                                        <div class="clasificacion">
+                                            <input id="radio5" type="radio" name="puntuacion" value="5">
+                                            <label for="radio5"><i class="fas fa-star"></i></label>
+                                            <input id="radio4" type="radio" name="puntuacion" value="4">
+                                            <label for="radio4"><i class="fas fa-star"></i></label>
+                                            <input id="radio3" type="radio" name="puntuacion" value="3">
+                                            <label for="radio3"><i class="fas fa-star"></i></label>
+                                            <input id="radio2" type="radio" name="puntuacion" value="2">
+                                            <label for="radio2"><i class="fas fa-star"></i></label>
+                                            <input id="radio1" type="radio" name="puntuacion" value="1" checked>
+                                            <label for="radio1"><i class="fas fa-star"></i></label>
+                                        </div>
+                                    </div>
+
+                                    <textarea name="texto_resena" class="form-control mb-3" rows="3"
+                                        placeholder="¿Qué te ha parecido la historia?" required></textarea>
+
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                                        <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Sé respetuoso. Evita
+                                            spoilers sin avisar.</small>
+                                        <button type="submit" class="btn btn-primary fw-bold px-4 mt-2 mt-sm-0">Publicar Opinión</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                 <?php elseif (!$usuario_logueado): ?>
                     <div class="alert alert-light border text-center mb-4 py-4">
                         <i class="fas fa-lock fa-2x mb-2 text-muted opacity-50 d-block"></i>
-                        <a href="login.php" class="fw-bold text-dark">Inicia sesión</a> para dejar tu valoración y reseña.
+                        <a href="/login" class="fw-bold text-dark">Inicia sesión</a> para dejar tu valoración y reseña.
                     </div>
                 <?php endif; ?>
 
@@ -216,8 +248,11 @@ include 'includes/header.php';
                     <?php while ($res = $lista_resenas->fetch_assoc()): ?>
                         <div class="d-flex mb-3 border-bottom pb-3 bg-white">
                             <div class="flex-shrink-0">
-                                <?php $foto = !empty($res['foto']) ? $res['foto'] : 'https://via.placeholder.com/50'; ?>
-                                <img src="<?php echo $foto; ?>" class="rounded-circle border" width="50" height="50" style="object-fit:cover;">
+                                <?php 
+                                    // Comprobación de HTTP para la foto de perfil
+                                    $foto = !empty($res['foto']) ? ((strpos($res['foto'], 'http') === 0) ? $res['foto'] : '/' . ltrim($res['foto'], '/')) : 'https://via.placeholder.com/50'; 
+                                ?>
+                                <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle border" width="50" height="50" style="object-fit:cover;">
                             </div>
                             <div class="flex-grow-1 ms-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -229,19 +264,20 @@ include 'includes/header.php';
                                     </h6>
                                     <small class="text-muted">
                                         <?php echo date('d/m/Y', strtotime($res['fecha'])); ?>
+                                        
                                         <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
-                                            <a href="detalle.php?id=<?php echo $idObra; ?>&borrar_resena=<?php echo $res['id']; ?>"
-                                                class="text-danger ms-2" onclick="return confirm('¿Borrar reseña?');" title="Borrar">
-                                                <i class="fas fa-trash"></i>
-                                            </a>
+                                            <form method="POST" class="d-inline ms-2" onsubmit="return confirm('¿Borrar reseña?');">
+                                                <input type="hidden" name="borrar_resena" value="<?php echo $res['id']; ?>">
+                                                <button type="submit" class="btn btn-link text-danger p-0 border-0 align-baseline" title="Borrar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
                                         <?php endif; ?>
                                     </small>
                                 </div>
-
                                 <div class="mb-2">
                                     <?php echo pintarEstrellas($res['puntuacion']); ?>
                                 </div>
-
                                 <p class="mb-0 text-secondary" style="white-space: pre-wrap; font-size: 0.95rem;">
                                     <?php echo htmlspecialchars($res['texto']); ?></p>
                             </div>
@@ -264,8 +300,6 @@ include 'includes/header.php';
     const obra = <?php echo json_encode($datos_obra); ?>;
     const esFavorito = <?php echo json_encode($es_favorito); ?>;
     const estaLogueado = <?php echo json_encode($usuario_logueado); ?>;
-    
-    // CORRECCIÓN VITAL: Pasamos la variable PHP como un texto (string) válido a JavaScript
     const rolUsuario = '<?php echo $rol_usuario; ?>';
 
     function generarEstrellasJS(nota) {
@@ -287,15 +321,19 @@ include 'includes/header.php';
         }
 
         const generosHTML = (obra.generos || []).map(g => `<span class="badge bg-light text-dark border me-1">${g}</span>`).join('');
-        const imagen = obra.portada || 'https://via.placeholder.com/300x450';
+        
+        // Comprobación de HTTP en JavaScript para la portada de la obra
+        let imagen = 'https://via.placeholder.com/300x450';
+        if (obra.portada) {
+            imagen = obra.portada.startsWith('http') ? obra.portada : '/' + obra.portada.replace(/^\/+/, '');
+        }
 
         let botonFavHTML = '';
-        // Si está logueado y NO es admin, pintamos el botón de favoritos
         if (estaLogueado && rolUsuario !== 'admin') {
             if (esFavorito) {
-                botonFavHTML = `<a href="accion_favorito.php?id=${obra.id}&accion=quitar" class="btn btn-outline-danger ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="fas fa-heart"></i> Guardado</a>`;
+                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&accion=quitar" class="btn btn-outline-danger ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="fas fa-heart"></i> Guardado</a>`;
             } else {
-                botonFavHTML = `<a href="accion_favorito.php?id=${obra.id}&accion=poner" class="btn btn-outline-primary ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="far fa-heart"></i> Guardar</a>`;
+                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&accion=poner" class="btn btn-outline-primary ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="far fa-heart"></i> Guardar</a>`;
             }
         }
 
@@ -305,17 +343,15 @@ include 'includes/header.php';
                 const estaLeido = obra.leidos_por_usuario && obra.leidos_por_usuario.includes(cap.id);
                 let iconoOjo = '';
                 
-                // Si está logueado y NO es admin, pintamos los ojitos de leído
                 if (estaLogueado && rolUsuario !== 'admin') {
                     if (estaLeido) {
-                        iconoOjo = `<a href="accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=desmarcar" class="text-primary me-3 text-decoration-none" title="Marcar como NO leído"><i class="fas fa-eye fs-5"></i></a>`;
+                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=desmarcar" class="text-primary me-3 text-decoration-none" title="Marcar como NO leído"><i class="fas fa-eye fs-5"></i></a>`;
                     } else {
-                        iconoOjo = `<a href="accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=marcar" class="text-muted me-3 text-decoration-none" style="opacity: 0.3;" title="Marcar como leído"><i class="fas fa-eye-slash fs-5"></i></a>`;
+                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=marcar" class="text-muted me-3 text-decoration-none" style="opacity: 0.3;" title="Marcar como leído"><i class="fas fa-eye-slash fs-5"></i></a>`;
                     }
                 }
                 const opacidadTexto = estaLeido ? 'opacity: 0.5;' : '';
 
-                // El botón de Play vuelve a ser Azul (text-primary)
                 return `
                 <div class="capitulo-item d-flex justify-content-between align-items-center border-bottom p-3 hover-effect-light">
                     <div style="${opacidadTexto}">
@@ -324,7 +360,7 @@ include 'includes/header.php';
                     </div>
                     <div class="d-flex align-items-center">
                         ${iconoOjo}
-                        <a href="visor.php?obraId=${obra.id}&capId=${cap.id}" class="text-primary hover-scale">
+                        <a href="/obra/${obra.slug}/${cap.slug}" class="text-primary hover-scale">
                             <i class="fas fa-play-circle fs-3"></i>
                         </a>
                     </div>
@@ -334,7 +370,6 @@ include 'includes/header.php';
             capsHTML = '<div class="alert alert-light text-center text-muted m-3 border">No hay capítulos subidos aún.</div>';
         }
 
-        // PINTAR HTML AL 100% DE ANCHO Y PORTADA GRANDE
         contenedor.innerHTML = `
             <div class="container mt-4 mb-5">
                 <div class="row">

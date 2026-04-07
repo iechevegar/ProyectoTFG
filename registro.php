@@ -9,7 +9,6 @@ if (isset($_SESSION['usuario'])) {
 }
 
 $error = '';
-$success = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $nombre = trim($_POST['usuario']);
@@ -22,8 +21,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $error = "Por favor, rellena todos los campos.";
     } elseif ($pass !== $confirm_pass) {
         $error = "Las contraseñas no coinciden.";
-    } elseif (strlen($pass) < 4) {
-        $error = "La contraseña debe tener al menos 4 caracteres.";
+    } elseif (strlen($pass) < 6) {
+        $error = "La contraseña debe tener al menos 6 caracteres.";
     } else {
         // 2. COMPROBAR SI EL USUARIO O EMAIL YA EXISTEN
         $sql = "SELECT id FROM usuarios WHERE nombre = ? OR email = ?";
@@ -35,8 +34,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($stmt->num_rows > 0) {
             $error = "Ese nombre de usuario o email ya está registrado.";
         } else {
-            // 3. ENCRIPTAR CONTRASEÑA (IMPORTANTE PARA TFG)
-            // Usamos PASSWORD_DEFAULT que es el estándar actual seguro
+            // 3. ENCRIPTAR CONTRASEÑA
             $pass_hash = password_hash($pass, PASSWORD_DEFAULT);
             $rol = 'lector'; // Por defecto todos son lectores
 
@@ -46,7 +44,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt_insert->bind_param("ssss", $nombre, $email, $pass_hash, $rol);
 
             if ($stmt_insert->execute()) {
-                $success = "¡Cuenta creada con éxito! Ahora puedes iniciar sesión.";
+                // --- MAGIA UX: AUTO-LOGIN ---
+                session_regenerate_id(true); // Seguridad extra
+                
+                $_SESSION['usuario'] = $nombre;
+                $_SESSION['rol'] = $rol;
+                $_SESSION['foto'] = null; // Como acaba de registrarse, aún no tiene foto
+                
+                // Lo enviamos directo al catálogo (index.php) ya logueado
+                header("Location: index.php");
+                exit();
+                // ----------------------------
             } else {
                 $error = "Error al registrarse. Inténtalo de nuevo.";
             }
@@ -74,17 +82,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
         
         <?php if($error): ?>
-            <div class="alert alert-danger"><?php echo $error; ?></div>
+            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-1"></i> <?php echo $error; ?></div>
         <?php endif; ?>
-        
-        <?php if($success): ?>
-            <div class="alert alert-success">
-                <?php echo $success; ?>
-                <div class="mt-2">
-                    <a href="login.php" class="btn btn-sm btn-success w-100">Ir a Iniciar Sesión</a>
-                </div>
-            </div>
-        <?php else: ?>
 
         <form method="POST" action="">
             <div class="mb-3 text-start">
@@ -108,14 +107,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
             
             <div class="d-grid">
-                <button type="submit" class="btn btn-primary">Registrarse</button>
+                <button type="submit" class="btn btn-primary fw-bold">Registrarse y Entrar</button>
             </div>
         </form>
 
         <div class="mt-4 text-center small text-muted">
             ¿Ya tienes cuenta? <a href="login.php" class="text-primary text-decoration-none fw-bold">Inicia Sesión</a>
         </div>
-        <?php endif; ?>
     </div>
 
 </body>

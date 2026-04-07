@@ -2,6 +2,24 @@
 session_start();
 require 'includes/db.php';
 
+// --- COMPROBAR SI EL USUARIO ESTÁ SUSPENDIDO ---
+$estaSuspendido = false;
+$fechaDesbloqueoStr = '';
+
+if (isset($_SESSION['usuario'])) {
+    $nombreUser = $_SESSION['usuario'];
+    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
+    if ($resUser && $resUser->num_rows > 0) {
+        $userData = $resUser->fetch_assoc();
+        
+        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
+            $estaSuspendido = true;
+            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
+        }
+    }
+}
+// -----------------------------------------------
+
 // --- FUNCIÓN AUXILIAR DE TIEMPO ---
 function tiempo_transcurrido_foro($fecha) {
     if (!$fecha) return "";
@@ -20,11 +38,11 @@ $categoria = isset($_GET['cat']) ? $_GET['cat'] : 'todas';
 $orden = isset($_GET['orden']) ? $_GET['orden'] : 'actividad';
 
 // --- CONFIGURACIÓN DE PAGINACIÓN ---
-$resultados_por_pagina = 8; // Mostramos 8 temas por página
+$resultados_por_pagina = 8;
 $pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
 $offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
-// --- CONDICIÓN SQL BASE (Para contar y buscar) ---
+// --- CONDICIÓN SQL BASE ---
 $condicion_sql = "WHERE 1=1";
 if (!empty($busqueda)) {
     $condicion_sql .= " AND (t.titulo LIKE '%$busqueda%' OR t.contenido LIKE '%$busqueda%')";
@@ -49,7 +67,6 @@ $sql = "SELECT t.*, u.nombre, u.foto, u.rol,
         JOIN usuarios u ON t.usuario_id = u.id
         $condicion_sql";
 
-// Ordenación
 if ($orden === 'populares') {
     $sql .= " ORDER BY num_respuestas DESC, t.fecha DESC";
 } elseif ($orden === 'antiguos') {
@@ -60,16 +77,13 @@ if ($orden === 'populares') {
     $sql .= " ORDER BY COALESCE(ultima_actividad_fecha, t.fecha) DESC";
 }
 
-// Aplicar Límite de Paginación
 $sql .= " LIMIT $resultados_por_pagina OFFSET $offset";
 $resultado = $conn->query($sql);
 
-// --- PREPARAR URL PARA LOS BOTONES DE PAGINACIÓN ---
 $parametros_url = $_GET;
 unset($parametros_url['pagina']); 
 $url_base = "foro.php?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
 
-// Función para colores de categorías
 function badgeColor($cat) {
     switch($cat) {
         case 'Teorías': return 'bg-purple text-white'; 
@@ -88,12 +102,29 @@ function badgeColor($cat) {
         <div class="col-lg-3 mb-4">
             
             <?php if(isset($_SESSION['usuario'])): ?>
-                <a href="crear_tema.php" class="btn btn-primary w-100 mb-4 fw-bold shadow-sm">
-                    <i class="fas fa-plus me-2"></i>Crear Nuevo Tema
-                </a>
+                
+                <?php if($estaSuspendido): ?>
+                    <div class="alert alert-danger text-center shadow-sm mb-4 border-danger p-3">
+                        <i class="fas fa-ban fa-2x mb-2 opacity-75"></i>
+                        <h6 class="fw-bold mb-1">Cuenta Suspendida</h6>
+                        <small class="d-block mb-1">No puedes crear temas.</small>
+                        <small class="fw-bold opacity-75 text-danger">Hasta: <?php echo $fechaDesbloqueoStr; ?></small>
+                    </div>
+                <?php else: ?>
+                    <a href="crear_tema.php" class="btn btn-primary w-100 mb-4 fw-bold shadow-sm">
+                        <i class="fas fa-plus me-2"></i>Crear Nuevo Tema
+                    </a>
+                <?php endif; ?>
+
             <?php else: ?>
                 <div class="alert alert-info small text-center mb-4">
                     <a href="login.php" class="fw-bold">Entra</a> para crear temas.
+                </div>
+            <?php endif; ?>
+
+            <?php if(isset($_GET['error']) && $_GET['error'] == 'cuenta_suspendida'): ?>
+                <div class="alert alert-danger small text-center mb-4 shadow-sm">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Acción denegada.
                 </div>
             <?php endif; ?>
 

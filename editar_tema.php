@@ -10,18 +10,17 @@ if (!isset($_SESSION['usuario']) || !isset($_GET['id'])) {
 $idTema = intval($_GET['id']);
 $nombreUser = $_SESSION['usuario'];
 
-// 1. OBTENER DATOS Y VERIFICAR DUEÑO
-// Hacemos JOIN para verificar que el usuario actual es el dueño
+// 1. OBTENER DATOS Y VERIFICAR DUEÑO (Protegido con bind_param)
 $sql = "SELECT t.* FROM foro_temas t 
         JOIN usuarios u ON t.usuario_id = u.id 
-        WHERE t.id = $idTema AND u.nombre = ?";
+        WHERE t.id = ? AND u.nombre = ?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("s", $nombreUser);
+$stmt->bind_param("is", $idTema, $nombreUser);
 $stmt->execute();
 $tema = $stmt->get_result()->fetch_assoc();
 
 if (!$tema) {
-    die("No tienes permiso para editar este tema o no existe.");
+    die("<div class='container py-5 text-center'><h3>No tienes permiso para editar este tema o no existe.</h3><a href='foro.php' class='btn btn-primary mt-3'>Volver al foro</a></div>");
 }
 
 // 2. PROCESAR EDICIÓN
@@ -42,24 +41,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 }
+
+// SOLUCIÓN AL "HEADER MOVIDO": Incluimos el header dentro del bloque PHP principal 
+// para evitar imprimir saltos de línea accidentales antes del DOCTYPE.
+include 'includes/header.php'; 
 ?>
-<?php include 'includes/header.php'; ?>
 
 <main class="container py-5">
     <div class="row justify-content-center">
         <div class="col-md-8">
-            <h3 class="mb-4">Editar Tema</h3>
-            <div class="card shadow-sm">
-                <div class="card-body">
+            
+            <div class="mb-3">
+                <a href="tema.php?id=<?php echo $idTema; ?>" class="text-decoration-none text-muted fw-bold">
+                    <i class="fas fa-arrow-left me-1"></i> Volver al Tema
+                </a>
+            </div>
+
+            <div class="card shadow-sm border-primary border-top-4">
+                <div class="card-body p-4">
+                    <h4 class="mb-4 fw-bold"><i class="fas fa-pencil-alt text-primary me-2"></i>Editar Tema</h4>
+                    
                     <form method="POST" action="">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Título</label>
-                            <input type="text" name="titulo" class="form-control" value="<?php echo htmlspecialchars($tema['titulo']); ?>" required>
+                            <label class="form-label fw-bold text-secondary small text-uppercase">Título del debate</label>
+                            <input type="text" name="titulo" class="form-control bg-light" value="<?php echo htmlspecialchars($tema['titulo']); ?>" required maxlength="100">
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Categoría</label>
-                            <select name="categoria" class="form-select">
+                            <label class="form-label fw-bold text-secondary small text-uppercase">Categoría</label>
+                            <select name="categoria" class="form-select bg-light">
                                 <?php 
                                 $cats = ['General', 'Teorías', 'Noticias', 'Recomendaciones', 'Off-Topic'];
                                 foreach($cats as $c) {
@@ -70,19 +80,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Contenido</label>
-                            <textarea name="contenido" class="form-control" rows="6" required><?php echo htmlspecialchars($tema['contenido']); ?></textarea>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-secondary small text-uppercase">Contenido</label>
+                            <textarea name="contenido" class="form-control bg-light" rows="8" required><?php echo htmlspecialchars($tema['contenido']); ?></textarea>
                         </div>
 
-                        <div class="d-flex justify-content-end gap-2">
-                            <a href="tema.php?id=<?php echo $idTema; ?>" class="btn btn-secondary">Cancelar</a>
-                            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                        <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                            <a href="tema.php?id=<?php echo $idTema; ?>" class="btn btn-light fw-bold px-4">Cancelar</a>
+                            <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm">
+                                <i class="fas fa-save me-2"></i>Guardar Cambios
+                            </button>
                         </div>
                     </form>
                 </div>
             </div>
+
         </div>
     </div>
 </main>
+
 <?php include 'includes/footer.php'; ?>

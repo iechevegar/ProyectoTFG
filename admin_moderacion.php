@@ -8,10 +8,10 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
     exit();
 }
 
-// --- LÓGICA DE BORRADO ---
-if (isset($_GET['borrar']) && isset($_GET['tipo']) && isset($_GET['id'])) {
-    $tipo = $_GET['tipo'];
-    $id = intval($_GET['id']);
+// --- LÓGICA DE BORRADO SEGURO (POST) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['borrar']) && isset($_POST['tipo']) && isset($_POST['id'])) {
+    $tipo = $_POST['tipo'];
+    $id = intval($_POST['id']);
     
     if ($tipo === 'resena') {
         $conn->query("DELETE FROM resenas WHERE id = $id");
@@ -37,7 +37,7 @@ $resResenas = $conn->query("SELECT r.id, r.texto, r.fecha, u.nombre as autor, o.
                             JOIN obras o ON r.obra_id = o.id");
 while($row = $resResenas->fetch_assoc()) {
     $row['tipo'] = 'resena';
-    $row['grupo_filtro'] = 'resenas'; // Para el filtro JS
+    $row['grupo_filtro'] = 'resenas';
     $row['etiqueta'] = 'Reseña en Obra';
     $row['color'] = 'warning';
     $actividad[] = $row;
@@ -50,7 +50,7 @@ $resComentarios = $conn->query("SELECT c.id, c.texto, c.fecha, u.nombre as autor
                                 JOIN capitulos cap ON c.capitulo_id = cap.id");
 while($row = $resComentarios->fetch_assoc()) {
     $row['tipo'] = 'comentario';
-    $row['grupo_filtro'] = 'comentarios'; // Para el filtro JS
+    $row['grupo_filtro'] = 'comentarios';
     $row['etiqueta'] = 'Comentario en Cap.';
     $row['color'] = 'success';
     $actividad[] = $row;
@@ -62,7 +62,7 @@ $resTemas = $conn->query("SELECT t.id, t.contenido as texto, t.fecha, u.nombre a
                           JOIN usuarios u ON t.usuario_id = u.id");
 while($row = $resTemas->fetch_assoc()) {
     $row['tipo'] = 'foro_tema';
-    $row['grupo_filtro'] = 'foro'; // Para el filtro JS
+    $row['grupo_filtro'] = 'foro';
     $row['etiqueta'] = 'Tema en Foro';
     $row['color'] = 'primary';
     $actividad[] = $row;
@@ -75,7 +75,7 @@ $resRespuestas = $conn->query("SELECT r.id, r.mensaje as texto, r.fecha, u.nombr
                                JOIN foro_temas t ON r.tema_id = t.id");
 while($row = $resRespuestas->fetch_assoc()) {
     $row['tipo'] = 'foro_respuesta';
-    $row['grupo_filtro'] = 'foro'; // Para el filtro JS
+    $row['grupo_filtro'] = 'foro';
     $row['etiqueta'] = 'Respuesta Foro';
     $row['color'] = 'info';
     $actividad[] = $row;
@@ -86,7 +86,6 @@ usort($actividad, function($a, $b) {
     return strtotime($b['fecha']) - strtotime($a['fecha']);
 });
 
-// Limitar a los últimos 50 registros
 $actividad = array_slice($actividad, 0, 50);
 
 ?>
@@ -161,12 +160,14 @@ $actividad = array_slice($actividad, 0, 50);
                                     </td>
                                     
                                     <td class="text-end pe-4">
-                                        <a href="admin_moderacion.php?borrar=1&tipo=<?php echo $item['tipo']; ?>&id=<?php echo $item['id']; ?>" 
-                                           class="btn btn-sm btn-outline-danger" 
-                                           onclick="return confirm('¿Eliminar este mensaje definitivamente?');" 
-                                           title="Eliminar contenido">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </a>
+                                        <form action="admin_moderacion.php" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este mensaje definitivamente?');">
+                                            <input type="hidden" name="borrar" value="1">
+                                            <input type="hidden" name="tipo" value="<?php echo $item['tipo']; ?>">
+                                            <input type="hidden" name="id" value="<?php echo $item['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar contenido">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -200,9 +201,7 @@ $actividad = array_slice($actividad, 0, 50);
 </style>
 
 <script>
-    // Lógica para filtrar la tabla instantáneamente
     function filtrarTabla(categoria, botonClicado) {
-        // 1. Cambiar el estilo de los botones (Activar el pulsado, desactivar los demás)
         const botones = document.getElementById('botones-filtro').getElementsByTagName('button');
         for (let btn of botones) {
             btn.classList.remove('btn-dark', 'active');
@@ -211,22 +210,19 @@ $actividad = array_slice($actividad, 0, 50);
         botonClicado.classList.remove('btn-outline-dark');
         botonClicado.classList.add('btn-dark', 'active');
 
-        // 2. Filtrar las filas de la tabla
         const filas = document.querySelectorAll('.fila-registro');
         let contadorVisibles = 0;
 
         filas.forEach(fila => {
             const grupoFila = fila.getAttribute('data-grupo');
-            
             if (categoria === 'todo' || grupoFila === categoria) {
-                fila.style.display = ''; // Mostrar
+                fila.style.display = ''; 
                 contadorVisibles++;
             } else {
-                fila.style.display = 'none'; // Ocultar
+                fila.style.display = 'none'; 
             }
         });
 
-        // 3. Mostrar mensaje si el filtro deja la tabla vacía
         const filaNoResultados = document.getElementById('fila-no-resultados');
         if (contadorVisibles === 0 && filas.length > 0) {
             filaNoResultados.style.display = '';

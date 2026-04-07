@@ -10,10 +10,11 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
 
 // 1. ESTADÍSTICAS PARA EL DASHBOARD
 $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_assoc()['total'];
-$total_obras    = $conn->query("SELECT COUNT(*) as total FROM obras")->fetch_assoc()['total'];
-$total_caps     = $conn->query("SELECT COUNT(*) as total FROM capitulos")->fetch_assoc()['total'];
-$total_visitas  = $conn->query("SELECT SUM(visitas) as total FROM obras")->fetch_assoc()['total'];
-if(!$total_visitas) $total_visitas = 0;
+$total_obras = $conn->query("SELECT COUNT(*) as total FROM obras")->fetch_assoc()['total'];
+$total_caps = $conn->query("SELECT COUNT(*) as total FROM capitulos")->fetch_assoc()['total'];
+$total_visitas = $conn->query("SELECT SUM(visitas) as total FROM obras")->fetch_assoc()['total'];
+if (!$total_visitas)
+    $total_visitas = 0;
 
 // 2. LISTA DE OBRAS (Tu tabla de siempre)
 $sql = "SELECT * FROM obras ORDER BY id DESC";
@@ -23,15 +24,15 @@ $resultado = $conn->query($sql);
 <?php include 'includes/header.php'; ?>
 
 <main class="container py-4">
-    
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold"><i class="fas fa-tachometer-alt text-primary"></i> Panel de Control</h2>
-        
+
         <div class="d-flex gap-2">
             <a href="admin_moderacion.php" class="btn btn-danger text-white shadow-sm fw-bold">
                 <i class="fas fa-shield-alt me-2"></i>Moderación
             </a>
-            
+
             <a href="admin_usuarios.php" class="btn btn-dark text-white shadow-sm">
                 <i class="fas fa-users-cog me-2"></i>Usuarios
             </a>
@@ -41,7 +42,7 @@ $resultado = $conn->query($sql);
         </div>
     </div>
 
-    <?php if(isset($_GET['msg'])): ?>
+    <?php if (isset($_GET['msg'])): ?>
         <div class="alert alert-success alert-dismissible fade show">
             <?php echo htmlspecialchars($_GET['msg']); ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -107,7 +108,7 @@ $resultado = $conn->query($sql);
     </div>
 
     <h4 class="mb-3 border-bottom pb-2">Gestión del Catálogo</h4>
-    
+
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -124,18 +125,21 @@ $resultado = $conn->query($sql);
                     </thead>
                     <tbody>
                         <?php if ($resultado->num_rows > 0): ?>
-                            <?php while($obra = $resultado->fetch_assoc()): ?>
+                            <?php while ($obra = $resultado->fetch_assoc()): ?>
                                 <tr>
                                     <td class="ps-4">
-                                        <img src="<?php echo $obra['portada']; ?>" class="rounded shadow-sm" width="50" height="75" style="object-fit: cover;">
+                                        <img src="<?php echo $obra['portada']; ?>" class="rounded shadow-sm" width="50"
+                                            height="75" style="object-fit: cover;">
                                     </td>
                                     <td class="fw-bold"><?php echo $obra['titulo']; ?></td>
                                     <td class="text-muted small"><?php echo $obra['autor']; ?></td>
                                     <td>
-                                        <?php 
-                                            $tags = explode(',', $obra['generos']);
-                                            $tags = array_slice($tags, 0, 2); // Solo mostrar 2 etiquetas
-                                            foreach($tags as $t) { echo "<span class='badge bg-secondary me-1' style='font-size:0.7em'>".trim($t)."</span>"; }
+                                        <?php
+                                        $tags = explode(',', $obra['generos']);
+                                        $tags = array_slice($tags, 0, 2); // Solo mostrar 2 etiquetas
+                                        foreach ($tags as $t) {
+                                            echo "<span class='badge bg-secondary me-1' style='font-size:0.7em'>" . trim($t) . "</span>";
+                                        }
                                         ?>
                                     </td>
                                     <td>
@@ -144,20 +148,22 @@ $resultado = $conn->query($sql);
                                         </span>
                                     </td>
                                     <td class="text-end pe-4">
-                                        <a href="ver_capitulos.php?id=<?php echo $obra['id']; ?>" class="btn btn-sm btn-info text-white me-1" title="Gestionar Capítulos">
+                                        <a href="ver_capitulos.php?id=<?php echo $obra['id']; ?>"
+                                            class="btn btn-sm btn-info text-white me-1" title="Gestionar Capítulos">
                                             <i class="fas fa-layer-group"></i>
                                         </a>
 
-                                        <a href="editar_obra.php?id=<?php echo $obra['id']; ?>" class="btn btn-sm btn-warning text-white me-1" title="Editar">
+                                        <a href="editar_obra.php?id=<?php echo $obra['id']; ?>"
+                                            class="btn btn-sm btn-warning text-white me-1" title="Editar">
                                             <i class="fas fa-pencil-alt"></i>
                                         </a>
 
-                                        <a href="borrar_obra.php?id=<?php echo $obra['id']; ?>" 
-                                           class="btn btn-sm btn-danger" 
-                                           onclick="return confirm('¿Estás seguro? Se borrarán todos los capítulos asociados.');" 
-                                           title="Eliminar">
-                                            <i class="fas fa-trash"></i>
-                                        </a>
+                                        <form method="POST" action="borrar_obra.php" class="d-inline"
+                                            onsubmit="return confirm('¿Borrar esta obra?');">
+                                            <input type="hidden" name="id" value="<?php echo $obra['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i
+                                                    class="fas fa-trash"></i></button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endwhile; ?>

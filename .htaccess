@@ -1,0 +1,37 @@
+# 1. Apagar el defecto de Apache
+AcceptPathInfo Off
+
+# 2. Página 404
+ErrorDocument 404 /404.php
+
+# 3. Activar el motor de reescritura
+RewriteEngine On
+
+# 4. Magia para quitar "index.php" inicial
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /index\.php\ HTTP/
+RewriteRule ^index\.php$ / [R=301,L]
+
+# 5. Evitar que las reglas afecten a archivos físicos reales (como los CSS, JS o fotos)
+RewriteCond %{REQUEST_FILENAME} -d [OR]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# --- 6. TUS NUEVAS RUTAS AMIGABLES ---
+
+# Archivos generales sueltos (les quitamos el .php)
+RewriteRule ^foro/?$ foro.php [L,QSA]
+RewriteRule ^biblioteca/?$ biblioteca.php [L,QSA]
+RewriteRule ^perfil/?$ perfil.php [L,QSA]
+RewriteRule ^admin/?$ admin.php [L,QSA]
+RewriteRule ^login/?$ login.php [L,QSA]
+RewriteRule ^logout/?$ logout.php [L,QSA]
+
+# Rutas complejas con IDs
+# Obra: acepta letras, números y guiones (ej. /obra/solo-leveling)
+RewriteRule ^obra/([a-zA-Z0-9-]+)/?$ detalle.php?slug=$1 [L,QSA]
+
+# Visor: /obra/solo-leveling/capitulo-0-0
+RewriteRule ^obra/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)/?$ visor.php?obraSlug=$1&capSlug=$2 [L,QSA]
+
+# De: /tema/1 -> A: tema.php?id=1
+RewriteRule ^tema/([0-9]+)/?$ tema.php?id=$1 [L,QSA]

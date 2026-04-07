@@ -21,7 +21,8 @@ $sqlObra = "SELECT titulo FROM obras WHERE id = $idObra";
 $resObra = $conn->query($sqlObra);
 $obra = $resObra->fetch_assoc();
 
-if (!$obra) die("Obra no encontrada");
+if (!$obra)
+    die("Obra no encontrada");
 
 // OBTENER CAPÍTULOS
 $sqlCaps = "SELECT * FROM capitulos WHERE obra_id = $idObra ORDER BY id DESC"; // Los más nuevos primero
@@ -38,13 +39,13 @@ $resCaps = $conn->query($sqlCaps);
             </a>
             <h2>Gestión de: <span class="text-primary"><?php echo $obra['titulo']; ?></span></h2>
         </div>
-        
+
         <a href="agregar_capitulo.php?id=<?php echo $idObra; ?>" class="btn btn-success">
             <i class="fas fa-plus me-2"></i>Nuevo Capítulo
         </a>
     </div>
 
-    <?php if(isset($_GET['msg'])): ?>
+    <?php if (isset($_GET['msg'])): ?>
         <div class="alert alert-success alert-dismissible fade show">
             <?php echo htmlspecialchars($_GET['msg']); ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -64,26 +65,33 @@ $resCaps = $conn->query($sqlCaps);
                 </thead>
                 <tbody>
                     <?php if ($resCaps->num_rows > 0): ?>
-                        <?php while($cap = $resCaps->fetch_assoc()): ?>
-                            <?php 
-                                // Contar cuántas imágenes tiene (decodificando el JSON)
-                                $imgs = json_decode($cap['contenido'], true);
-                                $numPaginas = is_array($imgs) ? count($imgs) : 0;
+                        <?php while ($cap = $resCaps->fetch_assoc()): ?>
+                            <?php
+                            // Contar cuántas imágenes tiene (decodificando el JSON)
+                            $imgs = json_decode($cap['contenido'], true);
+                            $numPaginas = is_array($imgs) ? count($imgs) : 0;
                             ?>
                             <tr>
                                 <td class="ps-4 fw-bold"><?php echo $cap['titulo']; ?></td>
                                 <td><span class="badge bg-secondary"><?php echo $numPaginas; ?> págs</span></td>
                                 <td class="text-muted small"><?php echo date('d/m/Y', strtotime($cap['fecha_subida'])); ?></td>
                                 <td class="text-end pe-4">
-                                    <a href="visor.php?obraId=<?php echo $idObra; ?>&capId=<?php echo $cap['id']; ?>&origen=admin" class="btn btn-sm btn-outline-primary me-1" title="Ver">
+                                    <a href="visor.php?obraId=<?php echo $idObra; ?>&capId=<?php echo $cap['id']; ?>&origen=admin"
+                                        class="btn btn-sm btn-outline-primary me-1" title="Ver">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    
-                                    <a href="borrar_capitulo.php?id=<?php echo $cap['id']; ?>&obra_id=<?php echo $idObra; ?>" 
-                                       class="btn btn-sm btn-danger" 
-                                       onclick="return confirm('¿Estás seguro de borrar este capítulo? Se eliminarán todas sus imágenes.');">
-                                        <i class="fas fa-trash"></i>
-                                    </a>
+
+                                    <form method="POST" action="borrar_capitulo.php" class="d-inline"
+                                        onsubmit="return confirm('¿Estás seguro de borrar este capítulo? Se eliminarán todas sus imágenes físicas.');">
+
+                                        <input type="hidden" name="id" value="<?php echo $cap['id']; ?>">
+
+                                        <input type="hidden" name="obra_id" value="<?php echo $idObra; ?>">
+
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Borrar Capítulo">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endwhile; ?>

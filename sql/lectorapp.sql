@@ -1,13 +1,14 @@
 -- phpMyAdmin SQL Dump
--- version 5.2.1
+-- version 4.9.0.1
 -- https://www.phpmyadmin.net/
 --
--- Servidor: 127.0.0.1
--- Tiempo de generación: 14-01-2026 a las 08:11:03
--- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.2.12
+-- Servidor: sql100.infinityfree.com
+-- Tiempo de generación: 07-04-2026 a las 04:16:50
+-- Versión del servidor: 11.4.10-MariaDB
+-- Versión de PHP: 7.2.22
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+SET AUTOCOMMIT = 0;
 START TRANSACTION;
 SET time_zone = "+00:00";
 
@@ -18,11 +19,9 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Base de datos: `lectorapp`
+-- Base de datos: `if0_41551522_lectorapp`
 --
-DROP DATABASE IF EXISTS lectorapp;
-CREATE DATABASE IF NOT EXISTS lectorapp;
-USE lectorapp;
+
 -- --------------------------------------------------------
 
 --
@@ -44,7 +43,27 @@ CREATE TABLE `capitulos` (
 INSERT INTO `capitulos` (`id`, `obra_id`, `titulo`, `contenido`, `fecha_subida`) VALUES
 (1, 1, 'Capítulo 1: El encuentro', '[\"https://picsum.photos/800/1200?random=1\", \"https://picsum.photos/800/1200?random=2\"]', '2025-12-17 12:39:52'),
 (2, 1, 'Capítulo 2: La duda', '[\"https://picsum.photos/800/1200?random=3\", \"https://picsum.photos/800/1200?random=4\"]', '2025-12-17 12:39:52'),
-(6, 3, 'Capitulo 0.0 Solo Leveling', '["assets\/img\/capitulos\/1775029615_0_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_00.jpg","assets\/img\/capitulos\/1775029615_1_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_01.jpg","assets\/img\/capitulos\/1775029615_2_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_02.jpg","assets\/img\/capitulos\/1775029615_3_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_03.jpg","assets\/img\/capitulos\/1775029615_4_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_04.jpg","assets\/img\/capitulos\/1775029615_5_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_05.jpg","assets\/img\/capitulos\/1775029615_6_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_06.jpg","assets\/img\/capitulos\/1775029615_7_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_07.jpg","assets\/img\/capitulos\/1775029615_8_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_08.jpg","assets\/img\/capitulos\/1775029615_9_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_09.jpg","assets\/img\/capitulos\/1775029615_10_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_10.jpg","assets\/img\/capitulos\/1775029615_11_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_11.jpg","assets\/img\/capitulos\/1775029615_12_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_12.jpg","assets\/img\/capitulos\/1775029615_13_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_13.jpg","assets\/img\/capitulos\/1775029615_14_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_14.jpg","assets\/img\/capitulos\/1775029615_15_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_15.jpg","assets\/img\/capitulos\/1775029615_16_Cap\u00edtulo 0.00 Subido por Knight No Scanlation_16.jpg"]', '2026-01-13 12:24:29');
+(9, 3, 'Capitulo 0.0 Solo Leveling', '[\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/000_Captulo0.00SubidoporKnightNoScanlation00.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/001_Captulo0.00SubidoporKnightNoScanlation01.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/002_Captulo0.00SubidoporKnightNoScanlation02.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/003_Captulo0.00SubidoporKnightNoScanlation03.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/004_Captulo0.00SubidoporKnightNoScanlation04.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/005_Captulo0.00SubidoporKnightNoScanlation05.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/006_Captulo0.00SubidoporKnightNoScanlation06.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/007_Captulo0.00SubidoporKnightNoScanlation07.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/008_Captulo0.00SubidoporKnightNoScanlation08.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/009_Captulo0.00SubidoporKnightNoScanlation09.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/010_Captulo0.00SubidoporKnightNoScanlation10.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/011_Captulo0.00SubidoporKnightNoScanlation11.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/012_Captulo0.00SubidoporKnightNoScanlation12.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/013_Captulo0.00SubidoporKnightNoScanlation13.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/014_Captulo0.00SubidoporKnightNoScanlation14.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/015_Captulo0.00SubidoporKnightNoScanlation15.jpg\",\"assets\\/img\\/capitulos\\/Solo_Leveling\\/Capitulo_0_0_Solo_Leveling\\/016_Captulo0.00SubidoporKnightNoScanlation16.jpg\"]', '2026-04-01 14:34:30');
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `capitulos_leidos`
+--
+
+CREATE TABLE `capitulos_leidos` (
+  `id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `capitulo_id` int(11) NOT NULL,
+  `fecha_leido` datetime DEFAULT current_timestamp()
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+--
+-- Volcado de datos para la tabla `capitulos_leidos`
+--
+
+INSERT INTO `capitulos_leidos` (`id`, `usuario_id`, `capitulo_id`, `fecha_leido`) VALUES
+(12, 5, 9, '2026-04-07 09:06:36');
 
 -- --------------------------------------------------------
 
@@ -140,8 +159,8 @@ CREATE TABLE `obras` (
 --
 
 INSERT INTO `obras` (`id`, `titulo`, `autor`, `generos`, `sinopsis`, `portada`, `fecha_subida`, `visitas`) VALUES
-(1, 'Amor en la Ciudad', 'Laura Ruiz', 'Romance, Drama', 'Dos extraños se cruzan en el metro.', 'https://picsum.photos/300/450?random=1', '2025-12-17 12:39:52', 1),
-(3, 'Solo Leveling', 'Chu-Gong ha', 'Acción, Aventura, Fantasía, Fantasía Oscura', 'Hace 10 años, después de que \"La Puerta\" que conectaba el mundo real con el mundo de los monstruos se abriera, algunas de las personas recibieron el poder de cazar los monstruos que vivían al otro lado de esta. Se les conoce como \"cazadores\". Sin embargo, no todos los cazadores son poderosos. Sung Jin-Woo, un cazador de rango E, es alguien que tiene que arriesgar su vida en humildes calabozos, lo llaman el \"más débil del mundo\". Al no tener habilidades para mostrar, apenas gana dinero luchando en mazmorras de bajo nivel... Al menos hasta que se encontro con una mazmorra oculta durante una incursión. Luego de estar en el borde de la muerte,Sung Jin-Woo tiene un \"Segundo Despertar\" y con este consigue un poder invaluable.', 'assets/img/portadas/1765972097_SoloLeveling.jpg', '2025-12-17 12:48:17', 6);
+(1, 'Amor en la Ciudad', 'Laura Ruiz', 'Romance, Drama', 'Dos extraños se cruzan en el metro.', 'https://picsum.photos/300/450?random=1', '2025-12-17 12:39:52', 34),
+(3, 'Solo Leveling', 'Chu-Gong ha', 'Acción, Aventura, Fantasía, Fantasía Oscura', 'Hace 10 años, después de que \"La Puerta\" que conectaba el mundo real con el mundo de los monstruos se abriera, algunas de las personas recibieron el poder de cazar los monstruos que vivían al otro lado de esta. Se les conoce como \"cazadores\". Sin embargo, no todos los cazadores son poderosos. Sung Jin-Woo, un cazador de rango E, es alguien que tiene que arriesgar su vida en humildes calabozos, lo llaman el \"más débil del mundo\". Al no tener habilidades para mostrar, apenas gana dinero luchando en mazmorras de bajo nivel... Al menos hasta que se encontro con una mazmorra oculta durante una incursión. Luego de estar en el borde de la muerte,Sung Jin-Woo tiene un \"Segundo Despertar\" y con este consigue un poder invaluable.', 'assets/img/portadas/1765972097_SoloLeveling.jpg', '2025-12-17 12:48:17', 65);
 
 -- --------------------------------------------------------
 
@@ -154,15 +173,16 @@ CREATE TABLE `resenas` (
   `usuario_id` int(11) NOT NULL,
   `obra_id` int(11) NOT NULL,
   `texto` text NOT NULL,
-  `fecha` datetime DEFAULT current_timestamp()
+  `fecha` datetime DEFAULT current_timestamp(),
+  `puntuacion` int(11) NOT NULL DEFAULT 5
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Volcado de datos para la tabla `resenas`
 --
 
-INSERT INTO `resenas` (`id`, `usuario_id`, `obra_id`, `texto`, `fecha`) VALUES
-(1, 4, 3, 'Me parece increible esta historia, lo nunca antes visto', '2026-01-13 09:09:43');
+INSERT INTO `resenas` (`id`, `usuario_id`, `obra_id`, `texto`, `fecha`, `puntuacion`) VALUES
+(1, 4, 3, 'Me parece increible esta historia, lo nunca antes visto', '2026-01-13 09:09:43', 5);
 
 -- --------------------------------------------------------
 
@@ -177,34 +197,19 @@ CREATE TABLE `usuarios` (
   `password` varchar(255) NOT NULL,
   `rol` enum('admin','lector') DEFAULT 'lector',
   `fecha_registro` datetime DEFAULT current_timestamp(),
-  `foto` varchar(255) DEFAULT NULL
+  `foto` varchar(255) DEFAULT NULL,
+  `fecha_desbloqueo` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Volcado de datos para la tabla `usuarios`
 --
 
-INSERT INTO `usuarios` (`id`, `nombre`, `email`, `password`, `rol`, `fecha_registro`, `foto`) VALUES
-(1, 'Administrador', 'admin@lectorapp.com', 'admin', 'admin', '2025-12-17 12:39:52', NULL),
-(2, 'Lector1', 'lector@test.com', 'lector', 'lector', '2025-12-17 12:39:52', NULL),
-(4, 'iorittsu', 'ioritzecheverria@gmail.com', '$2y$10$jH7R7EBcEIPOAxvRb1WZCO9K9cvrCvbc811nD6zdYFjGAP5Le0wBG', 'lector', '2026-01-13 08:47:18', 'assets/img/avatars/user_4_1768291578.jpg'),
-(5, 'Papito', 'papito@gmail.com', '$2y$10$Kx/nR81bv10lrt69GSiOx.iEHe918w98qLGhk5tqYsdnGr9ZdazB6', 'lector', '2026-01-13 09:01:40', NULL);
-
--- --------------------------------------------------------
-
---
--- Estructura de tabla para la tabla `capitulos_leidos`
---
-
-CREATE TABLE capitulos_leidos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  usuario_id INT NOT NULL,
-  capitulo_id INT NOT NULL,
-  fecha_leido DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-  FOREIGN KEY (capitulo_id) REFERENCES capitulos(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_leido (usuario_id, capitulo_id)
-);
+INSERT INTO `usuarios` (`id`, `nombre`, `email`, `password`, `rol`, `fecha_registro`, `foto`, `fecha_desbloqueo`) VALUES
+(1, 'Administrador', 'admin@lectorapp.com', 'admin', 'admin', '2025-12-17 12:39:52', NULL, NULL),
+(2, 'Lector1', 'lector@test.com', 'lector', 'lector', '2025-12-17 12:39:52', NULL, NULL),
+(4, 'iorittsu', 'ioritzecheverria@gmail.com', '$2y$10$jH7R7EBcEIPOAxvRb1WZCO9K9cvrCvbc811nD6zdYFjGAP5Le0wBG', 'lector', '2026-01-13 08:47:18', 'assets/img/avatars/user_4_1768291578.jpg', NULL),
+(5, 'Papito', 'papito@gmail.com', '$2y$10$Kx/nR81bv10lrt69GSiOx.iEHe918w98qLGhk5tqYsdnGr9ZdazB6', 'lector', '2026-01-13 09:01:40', NULL, '2026-04-14 09:06:13');
 
 --
 -- Índices para tablas volcadas
@@ -216,6 +221,14 @@ CREATE TABLE capitulos_leidos (
 ALTER TABLE `capitulos`
   ADD PRIMARY KEY (`id`),
   ADD KEY `obra_id` (`obra_id`);
+
+--
+-- Indices de la tabla `capitulos_leidos`
+--
+ALTER TABLE `capitulos_leidos`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_leido` (`usuario_id`,`capitulo_id`),
+  ADD KEY `capitulo_id` (`capitulo_id`);
 
 --
 -- Indices de la tabla `comentarios`
@@ -277,7 +290,13 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de la tabla `capitulos`
 --
 ALTER TABLE `capitulos`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+--
+-- AUTO_INCREMENT de la tabla `capitulos_leidos`
+--
+ALTER TABLE `capitulos_leidos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT de la tabla `comentarios`
@@ -289,7 +308,7 @@ ALTER TABLE `comentarios`
 -- AUTO_INCREMENT de la tabla `favoritos`
 --
 ALTER TABLE `favoritos`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT de la tabla `foro_respuestas`

@@ -1,4 +1,8 @@
 /* assets/css/styles.css */
+html {
+    overflow-y: scroll;
+}
+
 :root {
     --primary-color: #333;
     --accent-color: #f4f4f5;

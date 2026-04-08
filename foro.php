@@ -59,6 +59,7 @@ $total_registros = $resTotal->fetch_assoc()['total'];
 $total_paginas = ceil($total_registros / $resultados_por_pagina);
 
 // --- CONSTRUCCIÓN DE LA CONSULTA SQL PRINCIPAL ---
+// t.* ya nos trae el 'slug' que creamos en la base de datos
 $sql = "SELECT t.*, u.nombre, u.foto, u.rol,
         (SELECT COUNT(*) FROM foro_respuestas WHERE tema_id = t.id) as num_respuestas,
         (SELECT fecha FROM foro_respuestas WHERE tema_id = t.id ORDER BY fecha DESC LIMIT 1) as ultima_actividad_fecha,
@@ -82,7 +83,9 @@ $resultado = $conn->query($sql);
 
 $parametros_url = $_GET;
 unset($parametros_url['pagina']); 
-$url_base = "foro.php?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
+unset($parametros_url['i']);
+
+$url_base = "/foro?" . http_build_query($parametros_url) . (empty($parametros_url) ? "" : "&");
 
 function badgeColor($cat) {
     switch($cat) {
@@ -111,14 +114,14 @@ function badgeColor($cat) {
                         <small class="fw-bold opacity-75 text-danger">Hasta: <?php echo $fechaDesbloqueoStr; ?></small>
                     </div>
                 <?php else: ?>
-                    <a href="crear_tema.php" class="btn btn-primary w-100 mb-4 fw-bold shadow-sm">
+                    <a href="/crear_tema.php" class="btn btn-primary w-100 mb-4 fw-bold shadow-sm">
                         <i class="fas fa-plus me-2"></i>Crear Nuevo Tema
                     </a>
                 <?php endif; ?>
 
             <?php else: ?>
                 <div class="alert alert-info small text-center mb-4">
-                    <a href="login.php" class="fw-bold">Entra</a> para crear temas.
+                    <a href="/login" class="fw-bold">Entra</a> para crear temas.
                 </div>
             <?php endif; ?>
 
@@ -131,7 +134,7 @@ function badgeColor($cat) {
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-body">
                     <h6 class="fw-bold text-muted mb-3">BUSCAR</h6>
-                    <form action="" method="GET">
+                    <form action="/foro" method="GET">
                         <div class="input-group">
                             <input type="text" name="q" class="form-control" placeholder="Palabra clave..." value="<?php echo htmlspecialchars($busqueda); ?>">
                             <button class="btn btn-outline-primary" type="submit"><i class="fas fa-search"></i></button>
@@ -146,26 +149,26 @@ function badgeColor($cat) {
                     <div class="list-group list-group-flush rounded-3">
                         <div class="list-group-item bg-light fw-bold text-muted small">CATEGORÍAS</div>
                         
-                        <a href="foro.php?cat=todas" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='todas'?'active':''; ?>">
+                        <a href="/foro?cat=todas" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='todas'?'active':''; ?>">
                             Todas
                             <i class="fas fa-layer-group opacity-50"></i>
                         </a>
-                        <a href="foro.php?cat=General" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='General'?'active':''; ?>">
+                        <a href="/foro?cat=General" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='General'?'active':''; ?>">
                             General
                         </a>
-                        <a href="foro.php?cat=Teorías" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Teorías'?'active':''; ?>">
+                        <a href="/foro?cat=Teorías" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Teorías'?'active':''; ?>">
                             Teorías
                             <i class="fas fa-brain opacity-50"></i>
                         </a>
-                        <a href="foro.php?cat=Noticias" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Noticias'?'active':''; ?>">
+                        <a href="/foro?cat=Noticias" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Noticias'?'active':''; ?>">
                             Noticias
                             <i class="fas fa-bullhorn opacity-50"></i>
                         </a>
-                        <a href="foro.php?cat=Recomendaciones" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Recomendaciones'?'active':''; ?>">
+                        <a href="/foro?cat=Recomendaciones" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Recomendaciones'?'active':''; ?>">
                             Recomendaciones
                             <i class="fas fa-thumbs-up opacity-50"></i>
                         </a>
-                        <a href="foro.php?cat=Off-Topic" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Off-Topic'?'active':''; ?>">
+                        <a href="/foro?cat=Off-Topic" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center <?php echo $categoria=='Off-Topic'?'active':''; ?>">
                             Off-Topic
                             <i class="fas fa-coffee opacity-50"></i>
                         </a>
@@ -181,7 +184,7 @@ function badgeColor($cat) {
                     <?php echo ($categoria === 'todas') ? 'Discusiones' : 'Categoría: ' . htmlspecialchars($categoria); ?>
                 </h4>
                 
-                <form action="" method="GET" class="d-flex align-items-center">
+                <form action="/foro" method="GET" class="d-flex align-items-center">
                     <?php if($categoria != 'todas') echo '<input type="hidden" name="cat" value="'.$categoria.'">'; ?>
                     <?php if($busqueda != '') echo '<input type="hidden" name="q" value="'.$busqueda.'">'; ?>
                     
@@ -202,15 +205,18 @@ function badgeColor($cat) {
                         <div class="card shadow-sm border-0 tema-card">
                             <div class="card-body d-flex gap-3">
                                 <div class="text-center d-none d-sm-block" style="width: 60px;">
-                                    <?php $foto = !empty($tema['foto']) ? $tema['foto'] : 'https://via.placeholder.com/50'; ?>
-                                    <img src="<?php echo $foto; ?>" class="rounded-circle mb-1" width="50" height="50" style="object-fit:cover;">
+                                    <?php 
+                                        // Truco HTTP para avatares
+                                        $foto = !empty($tema['foto']) ? ((strpos($tema['foto'], 'http') === 0) ? $tema['foto'] : '/' . ltrim($tema['foto'], '/')) : 'https://via.placeholder.com/50'; 
+                                    ?>
+                                    <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle mb-1" width="50" height="50" style="object-fit:cover;">
                                 </div>
 
                                 <div class="flex-grow-1">
                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                         <div>
                                             <span class="badge <?php echo badgeColor($tema['categoria']); ?> mb-1 me-1"><?php echo $tema['categoria']; ?></span>
-                                            <a href="tema.php?id=<?php echo $tema['id']; ?>" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
+                                            <a href="/foro/<?php echo urlencode($tema['slug']); ?>" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
                                                 <?php echo htmlspecialchars($tema['titulo']); ?>
                                             </a>
                                         </div>

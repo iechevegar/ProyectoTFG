@@ -1,9 +1,10 @@
 <?php
 session_start();
 require 'includes/db.php';
+require 'includes/funciones.php'; // <-- IMPORTAMOS LA FUNCIÓN MÁGICA
 
 if (!isset($_SESSION['usuario'])) {
-    header("Location: login.php");
+    header("Location: /login");
     exit();
 }
 
@@ -17,11 +18,10 @@ $userId = $userData['id'];
 
 if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
     // Si está bloqueado, lo expulsamos inmediatamente de vuelta al foro
-    header("Location: foro.php?error=cuenta_suspendida");
+    header("Location: /foro?error=cuenta_suspendida");
     exit();
 }
 // ------------------------------------------
-
 
 // 2. PROCESAR CREACIÓN DE TEMA
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -31,11 +31,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     if (!empty($titulo) && !empty($contenido)) {
 
-        $stmt = $conn->prepare("INSERT INTO foro_temas (usuario_id, titulo, contenido, categoria) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isss", $userId, $titulo, $contenido, $categoria);
+        // --- MAGIA: CREACIÓN DEL SLUG DEL TEMA ---
+        $slug = limpiarURL($titulo);
+        
+        // Comprobamos que no haya otro tema con el mismo slug exacto
+        $check_slug = $conn->query("SELECT id FROM foro_temas WHERE slug = '$slug'");
+        if ($check_slug && $check_slug->num_rows > 0) {
+            $slug = $slug . '-' . rand(100, 999); // Desempate
+        }
+        // -----------------------------------------
+
+        // Añadimos el slug a la inserción
+        $stmt = $conn->prepare("INSERT INTO foro_temas (usuario_id, titulo, slug, contenido, categoria) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("issss", $userId, $titulo, $slug, $contenido, $categoria);
         
         if ($stmt->execute()) {
-            header("Location: foro.php");
+            // UX: Lo mandamos directamente a su tema recién creado
+            header("Location: /foro/$slug");
             exit();
         } else {
             $error = "Error al crear el tema.";
@@ -52,7 +64,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="col-md-8">
             
             <div class="mb-3">
-                <a href="foro.php" class="text-decoration-none text-muted fw-bold">
+                <a href="/foro" class="text-decoration-none text-muted fw-bold">
                     <i class="fas fa-arrow-left me-1"></i> Volver al Foro
                 </a>
             </div>
@@ -90,7 +102,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         </div>
                         
                         <div class="d-flex justify-content-end gap-2 border-top pt-4">
-                            <a href="foro.php" class="btn btn-light fw-bold px-4">Cancelar</a>
+                            <a href="/foro" class="btn btn-light fw-bold px-4">Cancelar</a>
                             <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm">
                                 <i class="fas fa-paper-plane me-2"></i>Publicar Tema
                             </button>

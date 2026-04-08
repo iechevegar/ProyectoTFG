@@ -2,7 +2,7 @@
 $servername = "sql100.infinityfree.com"; // Tu MySQL Host Name
 $username = "if0_41551522";      // Tu MySQL User Name
 $password = "QYCyVphFpO5F";      // Tu MySQL Password
-$dbname = "if0_41551522_lectorapp"; // Tu Database Name
+$dbname = "if0_41551522_ioriscans"; // Tu Database Name
 
 // Crear conexión
 $conn = new mysqli($servername, $username, $password, $dbname);

@@ -2,13 +2,29 @@
 session_start();
 require 'includes/db.php';
 
-if (!isset($_GET['id'])) {
-    header("Location: foro.php");
+// 1. Validar SLUG en lugar de ID
+if (!isset($_GET['slug']) || empty($_GET['slug'])) {
+    header("Location: /foro");
     exit();
 }
 
-$idTema = intval($_GET['id']);
+$slug = $_GET['slug'];
+
+// --- OBTENER EL ID DEL TEMA A PARTIR DEL SLUG ---
+$sql_id = "SELECT id FROM foro_temas WHERE slug = ?";
+$stmt_id = $conn->prepare($sql_id);
+$stmt_id->bind_param("s", $slug);
+$stmt_id->execute();
+$res_id = $stmt_id->get_result();
+
+if ($res_id->num_rows === 0) {
+    header("Location: /404.php");
+    exit();
+}
+
+$idTema = $res_id->fetch_assoc()['id'];
 $resultados_por_pagina = 10; 
+// --------------------------------------------------
 
 // --- 1. COMPROBAR ESTADO DEL USUARIO Y SUSPENSIÓN ---
 $estaSuspendido = false;
@@ -43,7 +59,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             // DEFENSA BACKEND: Si está suspendido, no procesamos la respuesta
             if ($estaSuspendido) {
-                header("Location: tema.php?id=$idTema");
+                header("Location: /foro/$slug");
                 exit();
             }
 
@@ -58,11 +74,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $total_resp = $conn->query($sqlCount)->fetch_assoc()['total'];
                 $ultima_pagina = max(1, ceil($total_resp / $resultados_por_pagina));
                 
-                header("Location: tema.php?id=$idTema&pagina=$ultima_pagina");
+                header("Location: /foro/$slug?pagina=$ultima_pagina");
                 exit();
             }
         } else {
-            header("Location: login.php");
+            header("Location: /login");
             exit();
         }
     }
@@ -70,7 +86,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // B. BORRAR TEMA (Solo Admin - Seguro Anti-CSRF)
     if (isset($_POST['borrar_tema']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
         $conn->query("DELETE FROM foro_temas WHERE id = $idTema");
-        header("Location: foro.php");
+        header("Location: /foro");
         exit();
     }
 
@@ -78,7 +94,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['borrar_resp']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
         $idResp = intval($_POST['borrar_resp']);
         $conn->query("DELETE FROM foro_respuestas WHERE id = $idResp");
-        header("Location: tema.php?id=$idTema");
+        header("Location: /foro/$slug");
         exit();
     }
 }
@@ -95,7 +111,7 @@ $resTema = $conn->query($sqlTema);
 $tema = $resTema->fetch_assoc();
 
 if (!$tema) {
-    echo "<div class='container py-5 text-center'><h1>Tema no encontrado o eliminado.</h1><a href='foro.php' class='btn btn-primary mt-3'>Volver al Foro</a></div>";
+    echo "<div class='container py-5 text-center'><h1>Tema no encontrado o eliminado.</h1><a href='/foro' class='btn btn-primary mt-3'>Volver al Foro</a></div>";
     exit();
 }
 
@@ -121,7 +137,7 @@ $respuestas = $conn->query($sqlResp);
 <main class="container py-5" style="max-width: 900px;">
     
     <div class="mb-3">
-        <a href="foro.php" class="text-decoration-none text-muted fw-bold">
+        <a href="/foro" class="text-decoration-none text-muted fw-bold">
             <i class="fas fa-arrow-left me-1"></i> Volver al Foro
         </a>
     </div>
@@ -146,7 +162,10 @@ $respuestas = $conn->query($sqlResp);
             
             <div class="card-body">
                 <div class="d-flex mb-3 align-items-center border-bottom pb-3">
-                    <?php $foto = !empty($tema['foto']) ? $tema['foto'] : 'https://via.placeholder.com/50'; ?>
+                    <?php 
+                        // Truco para rutas absolutas de imagen
+                        $foto = !empty($tema['foto']) ? ((strpos($tema['foto'], 'http') === 0) ? $tema['foto'] : '/' . ltrim($tema['foto'], '/')) : 'https://via.placeholder.com/50'; 
+                    ?>
                     <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle me-3 border" width="50" height="50" style="object-fit:cover;">
                     <div>
                         <strong class="d-block text-dark fs-5">
@@ -171,7 +190,7 @@ $respuestas = $conn->query($sqlResp);
                 
                 <?php if(isset($_SESSION['usuario']) && $_SESSION['usuario'] === $tema['nombre']): ?>
                     <div class="mt-3 text-end">
-                        <a href="editar_tema.php?id=<?php echo $tema['id']; ?>" class="btn btn-sm btn-outline-secondary fw-bold">
+                        <a href="/editar_tema.php?id=<?php echo $tema['id']; ?>" class="btn btn-sm btn-outline-secondary fw-bold">
                             <i class="fas fa-pencil-alt me-1"></i> Editar Tema
                         </a>
                     </div>
@@ -198,7 +217,9 @@ $respuestas = $conn->query($sqlResp);
                     <div class="d-flex justify-content-between align-items-start border-bottom pb-2 mb-2">
                         
                         <div class="d-flex align-items-center">
-                            <?php $fotoR = !empty($resp['foto']) ? $resp['foto'] : 'https://via.placeholder.com/40'; ?>
+                            <?php 
+                                $fotoR = !empty($resp['foto']) ? ((strpos($resp['foto'], 'http') === 0) ? $resp['foto'] : '/' . ltrim($resp['foto'], '/')) : 'https://via.placeholder.com/40'; 
+                            ?>
                             <img src="<?php echo htmlspecialchars($fotoR); ?>" class="rounded-circle me-3 border" width="45" height="45" style="object-fit:cover;">
                             <div>
                                 <span class="fw-bold text-dark fs-6">
@@ -214,7 +235,7 @@ $respuestas = $conn->query($sqlResp);
 
                         <div>
                             <?php if(isset($_SESSION['usuario']) && $_SESSION['usuario'] === $resp['nombre']): ?>
-                                <a href="editar_respuesta.php?id=<?php echo $resp['id']; ?>" class="btn btn-sm btn-light text-secondary me-1" title="Editar">
+                                <a href="/editar_respuesta.php?id=<?php echo $resp['id']; ?>" class="btn btn-sm btn-light text-secondary me-1" title="Editar">
                                     <i class="fas fa-pencil-alt"></i>
                                 </a>
                             <?php endif; ?>
@@ -254,19 +275,19 @@ $respuestas = $conn->query($sqlResp);
         <nav aria-label="Paginación de respuestas" class="mt-4 mb-5">
             <ul class="pagination justify-content-center">
                 <li class="page-item <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">
-                    <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo ($pagina_actual - 1); ?>">
+                    <a class="page-link shadow-sm" href="/foro/<?php echo $slug; ?>?pagina=<?php echo ($pagina_actual - 1); ?>">
                         <i class="fas fa-chevron-left"></i> Anterior
                     </a>
                 </li>
                 
                 <?php for($i = 1; $i <= $total_paginas; $i++): ?>
                     <li class="page-item <?php echo ($pagina_actual == $i) ? 'active' : ''; ?>">
-                        <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo $i; ?>"><?php echo $i; ?></a>
+                        <a class="page-link shadow-sm" href="/foro/<?php echo $slug; ?>?pagina=<?php echo $i; ?>"><?php echo $i; ?></a>
                     </li>
                 <?php endfor; ?>
                 
                 <li class="page-item <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">
-                    <a class="page-link shadow-sm" href="tema.php?id=<?php echo $idTema; ?>&pagina=<?php echo ($pagina_actual + 1); ?>">
+                    <a class="page-link shadow-sm" href="/foro/<?php echo $slug; ?>?pagina=<?php echo ($pagina_actual + 1); ?>">
                         Siguiente <i class="fas fa-chevron-right"></i>
                     </a>
                 </li>
@@ -305,7 +326,7 @@ $respuestas = $conn->query($sqlResp);
         <?php else: ?>
             <div class="alert alert-secondary text-center shadow-sm py-4">
                 <i class="fas fa-lock fa-2x mb-3 text-muted opacity-50 d-block"></i>
-                <span class="fs-5">Debes <a href="login.php" class="fw-bold text-primary text-decoration-none">iniciar sesión</a> para participar.</span>
+                <span class="fs-5">Debes <a href="/login" class="fw-bold text-primary text-decoration-none">iniciar sesión</a> para participar.</span>
             </div>
         <?php endif; ?>
     </div>

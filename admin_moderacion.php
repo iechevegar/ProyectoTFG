@@ -4,7 +4,7 @@ require 'includes/db.php';
 
 // SEGURIDAD: Solo Administradores
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    header("Location: index.php");
+    header("Location: /");
     exit();
 }
 
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['borrar']) && isset($_
         $conn->query("DELETE FROM foro_respuestas WHERE id = $id");
     }
     
-    header("Location: admin_moderacion.php?msg=Contenido eliminado correctamente");
+    header("Location: /admin_moderacion?msg=Contenido eliminado correctamente");
     exit();
 }
 
@@ -94,11 +94,13 @@ $actividad = array_slice($actividad, 0, 50);
 
 <main class="container py-4">
     
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
-        <h2 class="fw-bold text-dark m-0"><i class="fas fa-shield-alt text-danger me-2"></i> Centro de Moderación</h2>
-        <a href="admin.php" class="btn btn-outline-secondary btn-sm fw-bold">
-            <i class="fas fa-arrow-left me-1"></i> Volver al Panel
-        </a>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="/admin" class="text-decoration-none text-muted mb-1 d-inline-block">
+                <i class="fas fa-arrow-left"></i> Volver al Panel
+            </a>
+            <h2 class="fw-bold text-dark m-0"><i class="fas fa-shield-alt text-danger me-2"></i> Centro de Moderación</h2>
+        </div>
     </div>
 
     <?php if(isset($_GET['msg'])): ?>
@@ -160,7 +162,7 @@ $actividad = array_slice($actividad, 0, 50);
                                     </td>
                                     
                                     <td class="text-end pe-4">
-                                        <form action="admin_moderacion.php" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este mensaje definitivamente?');">
+                                        <form action="/admin_moderacion" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este mensaje definitivamente?');">
                                             <input type="hidden" name="borrar" value="1">
                                             <input type="hidden" name="tipo" value="<?php echo $item['tipo']; ?>">
                                             <input type="hidden" name="id" value="<?php echo $item['id']; ?>">

@@ -4,7 +4,7 @@ require 'includes/db.php';
 
 // 1. SEGURIDAD: Solo admin
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: /login");
     exit();
 }
 
@@ -86,7 +86,7 @@ $resultado = $conn->query($sql);
     
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <a href="admin.php" class="text-decoration-none text-muted mb-1 d-inline-block">
+            <a href="/admin" class="text-decoration-none text-muted mb-1 d-inline-block">
                 <i class="fas fa-arrow-left"></i> Volver al Panel
             </a>
             <h2><i class="fas fa-users-cog text-dark"></i> Gestión de Usuarios</h2>
@@ -102,7 +102,7 @@ $resultado = $conn->query($sql);
 
     <div class="card shadow-sm mb-4 bg-light border-0">
         <div class="card-body">
-            <form method="GET" action="" class="row g-3 align-items-end">
+            <form method="GET" action="/admin_usuarios" class="row g-3 align-items-end">
                 <div class="col-md-4">
                     <label class="form-label fw-bold small">Buscar usuario</label>
                     <input type="text" name="busqueda" class="form-control" placeholder="Nombre..." value="<?php echo htmlspecialchars($filtro_nombre); ?>">
@@ -153,8 +153,11 @@ $resultado = $conn->query($sql);
                             <tr class="<?php echo $esYoMismo ? 'table-warning' : ''; ?>"> 
                                 <td class="ps-4">
                                     <div class="d-flex align-items-center">
-                                        <?php $foto = !empty($user['foto']) ? $user['foto'] : 'https://via.placeholder.com/40'; ?>
-                                        <img src="<?php echo $foto; ?>" class="rounded-circle me-3 border" width="40" height="40" style="object-fit:cover;">
+                                        <?php 
+                                            // Corrección de rutas absolutas para avatares
+                                            $foto = !empty($user['foto']) ? ((strpos($user['foto'], 'http') === 0) ? $user['foto'] : '/' . ltrim($user['foto'], '/')) : 'https://via.placeholder.com/40'; 
+                                        ?>
+                                        <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle me-3 border" width="40" height="40" style="object-fit:cover;">
                                         <div>
                                             <span class="fw-bold"><?php echo htmlspecialchars($user['nombre']); ?></span>
                                             <div class="small text-muted"><?php echo htmlspecialchars($user['email']); ?></div>
@@ -182,7 +185,7 @@ $resultado = $conn->query($sql);
                                     <?php if ($esYoMismo): ?>
                                         <span class="badge bg-secondary px-3 py-2"><i class="fas fa-user me-1"></i> Es tu cuenta</span>
                                     <?php else: ?>
-                                        <form method="POST" action="" class="d-inline">
+                                        <form method="POST" action="/admin_usuarios" class="d-inline">
                                             <input type="hidden" name="id" value="<?php echo $user['id']; ?>">
 
                                             <?php if($user['rol'] === 'lector'): ?>

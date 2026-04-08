@@ -4,7 +4,7 @@ require 'includes/db.php';
 
 // SEGURIDAD
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: /login");
     exit();
 }
 
@@ -29,14 +29,14 @@ $resultado = $conn->query($sql);
         <h2 class="fw-bold"><i class="fas fa-tachometer-alt text-primary"></i> Panel de Control</h2>
 
         <div class="d-flex gap-2">
-            <a href="admin_moderacion.php" class="btn btn-danger text-white shadow-sm fw-bold">
+            <a href="/admin_moderacion" class="btn btn-danger text-white shadow-sm fw-bold">
                 <i class="fas fa-shield-alt me-2"></i>Moderación
             </a>
 
-            <a href="admin_usuarios.php" class="btn btn-dark text-white shadow-sm">
+            <a href="/admin_usuarios" class="btn btn-dark text-white shadow-sm">
                 <i class="fas fa-users-cog me-2"></i>Usuarios
             </a>
-            <a href="agregar_obra.php" class="btn btn-success text-white shadow-sm">
+            <a href="/agregar_obra" class="btn btn-success text-white shadow-sm">
                 <i class="fas fa-plus me-2"></i>Nueva Obra
             </a>
         </div>
@@ -128,17 +128,21 @@ $resultado = $conn->query($sql);
                             <?php while ($obra = $resultado->fetch_assoc()): ?>
                                 <tr>
                                     <td class="ps-4">
-                                        <img src="<?php echo $obra['portada']; ?>" class="rounded shadow-sm" width="50"
+                                        <?php 
+                                            // Aseguramos ruta absoluta para la portada
+                                            $imgPortada = (strpos($obra['portada'], 'http') === 0) ? $obra['portada'] : '/' . ltrim($obra['portada'], '/');
+                                        ?>
+                                        <img src="<?php echo htmlspecialchars($imgPortada); ?>" class="rounded shadow-sm" width="50"
                                             height="75" style="object-fit: cover;">
                                     </td>
-                                    <td class="fw-bold"><?php echo $obra['titulo']; ?></td>
-                                    <td class="text-muted small"><?php echo $obra['autor']; ?></td>
+                                    <td class="fw-bold"><?php echo htmlspecialchars($obra['titulo']); ?></td>
+                                    <td class="text-muted small"><?php echo htmlspecialchars($obra['autor']); ?></td>
                                     <td>
                                         <?php
                                         $tags = explode(',', $obra['generos']);
                                         $tags = array_slice($tags, 0, 2); // Solo mostrar 2 etiquetas
                                         foreach ($tags as $t) {
-                                            echo "<span class='badge bg-secondary me-1' style='font-size:0.7em'>" . trim($t) . "</span>";
+                                            echo "<span class='badge bg-secondary me-1' style='font-size:0.7em'>" . htmlspecialchars(trim($t)) . "</span>";
                                         }
                                         ?>
                                     </td>
@@ -148,17 +152,17 @@ $resultado = $conn->query($sql);
                                         </span>
                                     </td>
                                     <td class="text-end pe-4">
-                                        <a href="ver_capitulos.php?id=<?php echo $obra['id']; ?>"
+                                        <a href="/ver_capitulos?id=<?php echo $obra['id']; ?>"
                                             class="btn btn-sm btn-info text-white me-1" title="Gestionar Capítulos">
                                             <i class="fas fa-layer-group"></i>
                                         </a>
 
-                                        <a href="editar_obra.php?id=<?php echo $obra['id']; ?>"
+                                        <a href="/editar_obra?id=<?php echo $obra['id']; ?>"
                                             class="btn btn-sm btn-warning text-white me-1" title="Editar">
                                             <i class="fas fa-pencil-alt"></i>
                                         </a>
 
-                                        <form method="POST" action="borrar_obra.php" class="d-inline"
+                                        <form method="POST" action="/borrar_obra" class="d-inline"
                                             onsubmit="return confirm('¿Borrar esta obra?');">
                                             <input type="hidden" name="id" value="<?php echo $obra['id']; ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i
@@ -171,7 +175,7 @@ $resultado = $conn->query($sql);
                             <tr>
                                 <td colspan="6" class="text-center py-5">
                                     <p class="text-muted">No hay obras registradas.</p>
-                                    <a href="agregar_obra.php" class="btn btn-primary">Añadir la primera</a>
+                                    <a href="/agregar_obra" class="btn btn-primary">Añadir la primera</a>
                                 </td>
                             </tr>
                         <?php endif; ?>

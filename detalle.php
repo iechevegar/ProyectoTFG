@@ -18,7 +18,6 @@ $stmt_id->execute();
 $res_id = $stmt_id->get_result();
 
 if ($res_id->num_rows === 0) {
-    // Si escriben una URL inventada (ej. /obra/batman), los mandamos al 404
     header("Location: /404.php");
     exit();
 }
@@ -37,8 +36,8 @@ if (isset($_SESSION['usuario'])) {
     $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
     if ($resUser && $resUser->num_rows > 0) {
         $userData = $resUser->fetch_assoc();
-        $userId = $userData['id']; // Lo guardamos para usarlo luego
-        
+        $userId = $userData['id'];
+
         if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
             $estaSuspendido = true;
             $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
@@ -52,27 +51,20 @@ $conn->query("UPDATE obras SET visitas = visitas + 1 WHERE id = $idObra");
 
 // --- LÓGICA DE RESEÑAS Y PUNTUACIÓN ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    // A. AÑADIR RESEÑA
     if (isset($_POST['texto_resena'])) {
         if (isset($_SESSION['usuario'])) {
-            
-            // DEFENSA BACKEND: Si está suspendido, lo rechazamos
             if ($estaSuspendido) {
                 header("Location: /obra/$slug");
                 exit();
             }
 
             $texto = trim($_POST['texto_resena']);
-            // 1 estrella por defecto si no tocan nada
             $puntuacion = isset($_POST['puntuacion']) ? intval($_POST['puntuacion']) : 1;
 
             if (!empty($texto) && $userId) {
-                // Insertamos texto Y puntuación
                 $stmt = $conn->prepare("INSERT INTO resenas (usuario_id, obra_id, texto, puntuacion) VALUES (?, ?, ?, ?)");
                 $stmt->bind_param("iisi", $userId, $idObra, $texto, $puntuacion);
                 if ($stmt->execute()) {
-                    // Redirigimos a la URL limpia
                     header("Location: /obra/$slug");
                     exit();
                 }
@@ -83,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // B. BORRAR RESEÑA (Solo Admin - Seguridad Anti-CSRF)
     if (isset($_POST['borrar_resena']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
         $idResena = intval($_POST['borrar_resena']);
         $conn->query("DELETE FROM resenas WHERE id = $idResena");
@@ -109,7 +100,6 @@ if ($resultado->num_rows > 0) {
     $datos_obra['nota_media'] = $resNota['media'] ? round($resNota['media'], 1) : 0;
     $datos_obra['total_votos'] = $resNota['total_votos'];
 
-    // Lógica Favoritos y Usuario Logueado
     $es_favorito = false;
     $usuario_logueado = isset($_SESSION['usuario']);
     $rol_usuario = isset($_SESSION['rol']) ? $_SESSION['rol'] : 'invitado';
@@ -120,26 +110,39 @@ if ($resultado->num_rows > 0) {
             $es_favorito = true;
         }
 
-        // --- LÓGICA DE CAPÍTULOS LEÍDOS ---
+        // --- OPTIMIZACIÓN Y LÓGICA DE MÁXIMO CAPÍTULO ---
         $capitulos_leidos = [];
-        $sqlLeidos = "SELECT capitulo_id FROM capitulos_leidos WHERE usuario_id = $userId";
+        $max_cap_tocado = 0;
+
+        $sqlLeidos = "SELECT cl.capitulo_id, cl.ultima_pagina 
+                      FROM capitulos_leidos cl 
+                      JOIN capitulos c ON cl.capitulo_id = c.id 
+                      WHERE cl.usuario_id = $userId AND c.obra_id = $idObra";
         $resLeidos = $conn->query($sqlLeidos);
+
         while ($row = $resLeidos->fetch_assoc()) {
-            $capitulos_leidos[] = $row['capitulo_id'];
+            $capitulos_leidos[$row['capitulo_id']] = $row['ultima_pagina'];
+            if ($row['capitulo_id'] > $max_cap_tocado) {
+                $max_cap_tocado = $row['capitulo_id'];
+            }
         }
         $datos_obra['leidos_por_usuario'] = $capitulos_leidos;
+        $datos_obra['max_cap_tocado'] = $max_cap_tocado;
     }
 
-    // Obtener Capítulos
-    $resCaps = $conn->query("SELECT id, titulo, slug, fecha_subida FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC");
+    // --- OBTENER CAPÍTULOS Y CONTAR SUS PÁGINAS ---
+    $resCaps = $conn->query("SELECT id, titulo, slug, fecha_subida, contenido FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC");
     $capitulos = [];
     while ($cap = $resCaps->fetch_assoc()) {
+        $imagenes = json_decode($cap['contenido'], true);
+        $cap['total_paginas'] = is_array($imagenes) ? count($imagenes) : 0;
+        unset($cap['contenido']);
         $capitulos[] = $cap;
     }
     $datos_obra['capitulos'] = $capitulos;
 }
 
-// CARGAR LAS RESEÑAS DE ESTA OBRA
+// CARGAR LAS RESEÑAS
 $sqlResenas = "SELECT r.*, u.nombre, u.foto, u.rol 
                FROM resenas r 
                JOIN usuarios u ON r.usuario_id = u.id 
@@ -147,7 +150,6 @@ $sqlResenas = "SELECT r.*, u.nombre, u.foto, u.rol
                ORDER BY r.fecha DESC";
 $lista_resenas = $conn->query($sqlResenas);
 
-// Función auxiliar PHP para dibujar estrellas
 function pintarEstrellas($nota)
 {
     $html = '';
@@ -165,13 +167,42 @@ include 'includes/header.php';
 ?>
 
 <style>
-    .clasificacion { direction: rtl; unicode-bidi: bidi-override; display: inline-block; }
-    .clasificacion input[type="radio"] { display: none; }
-    .clasificacion label { color: #ddd; font-size: 1.8rem; padding: 0 2px; cursor: pointer; transition: color 0.2s; }
-    .clasificacion label:hover, .clasificacion label:hover~label, .clasificacion input[type="radio"]:checked~label { color: #ffc107; }
-    .hover-effect-light:hover { background-color: #fbfbfb; }
-    .hover-scale { transition: transform 0.2s; display: inline-block; }
-    .hover-scale:hover { transform: scale(1.1); }
+    .clasificacion {
+        direction: rtl;
+        unicode-bidi: bidi-override;
+        display: inline-block;
+    }
+
+    .clasificacion input[type="radio"] {
+        display: none;
+    }
+
+    .clasificacion label {
+        color: #ddd;
+        font-size: 1.8rem;
+        padding: 0 2px;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .clasificacion label:hover,
+    .clasificacion label:hover~label,
+    .clasificacion input[type="radio"]:checked~label {
+        color: #ffc107;
+    }
+
+    .hover-effect-light:hover {
+        background-color: #fbfbfb;
+    }
+
+    .hover-scale {
+        transition: transform 0.2s;
+        display: inline-block;
+    }
+
+    .hover-scale:hover {
+        transform: scale(1.1);
+    }
 </style>
 
 <main style="padding-bottom: 4rem; background-color: #ffffff;">
@@ -190,25 +221,22 @@ include 'includes/header.php';
 
     <div class="container mt-5 pt-4 border-top">
         <h3 class="mb-4 fw-bold">Reseñas y Opiniones</h3>
-
         <div class="row">
             <div class="col-12">
-
                 <?php if ($usuario_logueado && $rol_usuario !== 'admin'): ?>
-                    
                     <?php if ($estaSuspendido): ?>
                         <div class="alert alert-danger text-center shadow-sm py-4 border-danger border-top-4 mb-4">
                             <i class="fas fa-ban fa-2x mb-3 text-danger opacity-75 d-block"></i>
                             <h5 class="fw-bold text-danger">Participación Bloqueada</h5>
                             <span class="fs-6 text-muted">Tu cuenta se encuentra en modo Solo Lectura por infracciones.</span>
-                            <small class="d-block mt-2 fw-bold text-danger">Podrás volver a publicar reseñas el: <?php echo $fechaDesbloqueoStr; ?></small>
+                            <small class="d-block mt-2 fw-bold text-danger">Podrás volver a publicar reseñas el:
+                                <?php echo $fechaDesbloqueoStr; ?></small>
                         </div>
                     <?php else: ?>
                         <div class="card mb-4 border shadow-sm">
                             <div class="card-body p-4">
                                 <form method="POST" action="">
                                     <label class="form-label fw-bold mb-0 text-dark">Deja tu valoración:</label>
-
                                     <div class="d-block mb-1">
                                         <div class="clasificacion">
                                             <input id="radio5" type="radio" name="puntuacion" value="5">
@@ -223,20 +251,18 @@ include 'includes/header.php';
                                             <label for="radio1"><i class="fas fa-star"></i></label>
                                         </div>
                                     </div>
-
                                     <textarea name="texto_resena" class="form-control mb-3" rows="3"
                                         placeholder="¿Qué te ha parecido la historia?" required></textarea>
-
                                     <div class="d-flex justify-content-between align-items-center flex-wrap">
                                         <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Sé respetuoso. Evita
                                             spoilers sin avisar.</small>
-                                        <button type="submit" class="btn btn-primary fw-bold px-4 mt-2 mt-sm-0">Publicar Opinión</button>
+                                        <button type="submit" class="btn btn-primary fw-bold px-4 mt-2 mt-sm-0">Publicar
+                                            Opinión</button>
                                     </div>
                                 </form>
                             </div>
                         </div>
                     <?php endif; ?>
-
                 <?php elseif (!$usuario_logueado): ?>
                     <div class="alert alert-light border text-center mb-4 py-4">
                         <i class="fas fa-lock fa-2x mb-2 text-muted opacity-50 d-block"></i>
@@ -248,11 +274,11 @@ include 'includes/header.php';
                     <?php while ($res = $lista_resenas->fetch_assoc()): ?>
                         <div class="d-flex mb-3 border-bottom pb-3 bg-white">
                             <div class="flex-shrink-0">
-                                <?php 
-                                    // Comprobación de HTTP para la foto de perfil
-                                    $foto = !empty($res['foto']) ? ((strpos($res['foto'], 'http') === 0) ? $res['foto'] : '/' . ltrim($res['foto'], '/')) : 'https://via.placeholder.com/50'; 
+                                <?php
+                                $foto = !empty($res['foto']) ? ((strpos($res['foto'], 'http') === 0) ? $res['foto'] : '/' . ltrim($res['foto'], '/')) : 'https://via.placeholder.com/50';
                                 ?>
-                                <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle border" width="50" height="50" style="object-fit:cover;">
+                                <img src="<?php echo htmlspecialchars($foto); ?>" class="rounded-circle border" width="50"
+                                    height="50" style="object-fit:cover;">
                             </div>
                             <div class="flex-grow-1 ms-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -264,11 +290,11 @@ include 'includes/header.php';
                                     </h6>
                                     <small class="text-muted">
                                         <?php echo date('d/m/Y', strtotime($res['fecha'])); ?>
-                                        
                                         <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
                                             <form method="POST" class="d-inline ms-2" onsubmit="return confirm('¿Borrar reseña?');">
                                                 <input type="hidden" name="borrar_resena" value="<?php echo $res['id']; ?>">
-                                                <button type="submit" class="btn btn-link text-danger p-0 border-0 align-baseline" title="Borrar">
+                                                <button type="submit" class="btn btn-link text-danger p-0 border-0 align-baseline"
+                                                    title="Borrar">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                             </form>
@@ -279,7 +305,8 @@ include 'includes/header.php';
                                     <?php echo pintarEstrellas($res['puntuacion']); ?>
                                 </div>
                                 <p class="mb-0 text-secondary" style="white-space: pre-wrap; font-size: 0.95rem;">
-                                    <?php echo htmlspecialchars($res['texto']); ?></p>
+                                    <?php echo htmlspecialchars($res['texto']); ?>
+                                </p>
                             </div>
                         </div>
                     <?php endwhile; ?>
@@ -289,11 +316,9 @@ include 'includes/header.php';
                         <p class="text-muted mb-0">Aún no hay reseñas. ¡Sé el primero en opinar!</p>
                     </div>
                 <?php endif; ?>
-
             </div>
         </div>
     </div>
-
 </main>
 
 <script>
@@ -301,6 +326,31 @@ include 'includes/header.php';
     const esFavorito = <?php echo json_encode($es_favorito); ?>;
     const estaLogueado = <?php echo json_encode($usuario_logueado); ?>;
     const rolUsuario = '<?php echo $rol_usuario; ?>';
+
+    // Funciones JS de Colores equivalentes a las de PHP
+    function obtenerColorTipoJS(tipo) {
+        const t = (tipo || '').toUpperCase().trim();
+        switch (t) {
+            case 'MANHWA': return '#1a9341';
+            case 'MANGA': return '#215bc2';
+            case 'NOVELA': return '#b71b29';
+            case 'DONGHUA': return '#17a2b8';
+            case 'MANHUA': return '#6f42c1';
+            default: return '#6c757d';
+        }
+    }
+
+    function obtenerColorDemografiaJS(demo) {
+        const d = (demo || '').toUpperCase().trim();
+        switch (d) {
+            case 'SEINEN': return '#bd1e2c';
+            case 'SHOUNEN': return '#d39200';
+            case 'SHOUJO': return '#b12f9d';
+            case 'JOSEI': return '#6610f2';
+            case 'KODOMO': return '#20c997';
+            default: return '#343a40';
+        }
+    }
 
     function generarEstrellasJS(nota) {
         let html = '';
@@ -320,9 +370,8 @@ include 'includes/header.php';
             return;
         }
 
-        const generosHTML = (obra.generos || []).map(g => `<span class="badge bg-light text-dark border me-1">${g}</span>`).join('');
-        
-        // Comprobación de HTTP en JavaScript para la portada de la obra
+        const generosHTML = (obra.generos || []).map(g => `<span class="badge bg-light text-dark border me-1 mb-1">${g}</span>`).join('');
+
         let imagen = 'https://via.placeholder.com/300x450';
         if (obra.portada) {
             imagen = obra.portada.startsWith('http') ? obra.portada : '/' + obra.portada.replace(/^\/+/, '');
@@ -331,26 +380,57 @@ include 'includes/header.php';
         let botonFavHTML = '';
         if (estaLogueado && rolUsuario !== 'admin') {
             if (esFavorito) {
-                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&accion=quitar" class="btn btn-outline-danger ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="fas fa-heart"></i> Guardado</a>`;
+                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&slug=${obra.slug}&accion=quitar" class="btn btn-outline-danger ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="fas fa-heart"></i> Guardado</a>`;
             } else {
-                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&accion=poner" class="btn btn-outline-primary ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="far fa-heart"></i> Guardar</a>`;
+                botonFavHTML = `<a href="/accion_favorito.php?id=${obra.id}&slug=${obra.slug}&accion=poner" class="btn btn-outline-primary ms-auto ms-md-3 rounded-pill btn-sm fw-bold"><i class="far fa-heart"></i> Guardar</a>`;
             }
+        }
+
+        // --- GENERACIÓN DE FRANJAS PARA LA PORTADA ---
+        const tipoObra = (obra.tipo_obra || 'DESCONOCIDO').toUpperCase();
+        const demoObra = (obra.demografia || 'DESCONOCIDO').toUpperCase();
+
+        let bandaTipoHTML = '';
+        if (tipoObra !== 'DESCONOCIDO') {
+            bandaTipoHTML = `<div class="position-absolute w-100 text-center fw-bold text-white py-1 z-2" style="top: 0; left: 0; background-color: ${obtenerColorTipoJS(tipoObra)}; font-size: 0.9rem; letter-spacing: 1px; border-top-left-radius: 0.35rem; border-top-right-radius: 0.35rem;">${tipoObra}</div>`;
+        }
+
+        let bandaDemoHTML = '';
+        if (demoObra !== 'DESCONOCIDO') {
+            bandaDemoHTML = `<div class="position-absolute w-100 text-center fw-bold text-white py-1 z-2" style="bottom: 0; left: 0; background-color: ${obtenerColorDemografiaJS(demoObra)}; font-size: 0.85rem; letter-spacing: 1px; border-bottom-left-radius: 0.35rem; border-bottom-right-radius: 0.35rem;">${demoObra}</div>`;
         }
 
         let capsHTML = '';
         if (obra.capitulos && obra.capitulos.length > 0) {
             capsHTML = obra.capitulos.map(cap => {
-                const estaLeido = obra.leidos_por_usuario && obra.leidos_por_usuario.includes(cap.id);
+
+                const maxCapTocado = parseInt(obra.max_cap_tocado) || 0;
+                let paginaLeida = obra.leidos_por_usuario ? parseInt(obra.leidos_por_usuario[cap.id]) : undefined;
+                const totalPaginas = parseInt(cap.total_paginas) || 1;
+
+                if (parseInt(cap.id) < maxCapTocado) {
+                    paginaLeida = totalPaginas;
+                }
+
+                const estaLeido = !isNaN(paginaLeida);
+                const estaTerminado = estaLeido && (paginaLeida >= totalPaginas || paginaLeida === 0);
+
+                let indicadorProgreso = '';
                 let iconoOjo = '';
-                
+
                 if (estaLogueado && rolUsuario !== 'admin') {
-                    if (estaLeido) {
-                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=desmarcar" class="text-primary me-3 text-decoration-none" title="Marcar como NO leído"><i class="fas fa-eye fs-5"></i></a>`;
+                    if (estaTerminado) {
+                        indicadorProgreso = `<span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill me-3 px-3 py-2"><i class="fas fa-check-double me-1"></i> Terminado</span>`;
+                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&slug=${obra.slug}&accion=desmarcar" class="text-success me-3 text-decoration-none" title="Marcar como NO leído"><i class="fas fa-eye fs-5"></i></a>`;
+                    } else if (estaLeido) {
+                        indicadorProgreso = `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary rounded-pill me-3 px-3 py-2"><i class="fas fa-bookmark me-1"></i> Pág. ${paginaLeida} / ${totalPaginas}</span>`;
+                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&slug=${obra.slug}&accion=desmarcar" class="text-primary me-3 text-decoration-none" title="Marcar como NO leído"><i class="fas fa-eye fs-5"></i></a>`;
                     } else {
-                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&accion=marcar" class="text-muted me-3 text-decoration-none" style="opacity: 0.3;" title="Marcar como leído"><i class="fas fa-eye-slash fs-5"></i></a>`;
+                        indicadorProgreso = `<span class="badge bg-light text-muted border rounded-pill me-3 px-3 py-2"><i class="fas fa-book me-1"></i> Nuevo</span>`;
+                        iconoOjo = `<a href="/accion_leido.php?capId=${cap.id}&obraId=${obra.id}&slug=${obra.slug}&accion=marcar" class="text-muted me-3 text-decoration-none" style="opacity: 0.3;" title="Marcar como leído"><i class="fas fa-eye-slash fs-5"></i></a>`;
                     }
                 }
-                const opacidadTexto = estaLeido ? 'opacity: 0.5;' : '';
+                const opacidadTexto = estaTerminado ? 'opacity: 0.5;' : '';
 
                 return `
                 <div class="capitulo-item d-flex justify-content-between align-items-center border-bottom p-3 hover-effect-light">
@@ -359,6 +439,7 @@ include 'includes/header.php';
                         <small class="text-muted">${new Date(cap.fecha_subida).toLocaleDateString()}</small>
                     </div>
                     <div class="d-flex align-items-center">
+                        ${indicadorProgreso}
                         ${iconoOjo}
                         <a href="/obra/${obra.slug}/${cap.slug}" class="text-primary hover-scale">
                             <i class="fas fa-play-circle fs-3"></i>
@@ -374,7 +455,11 @@ include 'includes/header.php';
             <div class="container mt-4 mb-5">
                 <div class="row">
                     <div class="col-md-4 col-lg-3 text-center text-md-start mb-4 mb-md-0">
-                        <img src="${imagen}" class="w-100 rounded border shadow-sm" alt="Portada">
+                        <div class="position-relative rounded border shadow-sm d-inline-block w-100 overflow-hidden">
+                            ${bandaTipoHTML}
+                            <img src="${imagen}" class="w-100 d-block" style="object-fit: cover;" alt="Portada">
+                            ${bandaDemoHTML}
+                        </div>
                     </div>
                     
                     <div class="col-md-8 col-lg-9 text-dark d-flex flex-column justify-content-center">
@@ -400,6 +485,7 @@ include 'includes/header.php';
                         </div>
                         
                         <p class="mb-2 fs-6">Autor: <strong>${obra.autor}</strong></p>
+                        
                         <div class="mb-4">${generosHTML}</div>
                         
                         <h5 class="fw-bold border-bottom pb-2">Sinopsis</h5>

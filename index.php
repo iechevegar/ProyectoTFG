@@ -18,6 +18,45 @@ function tiempo_transcurrido($fecha)
     return date("d/m/Y", $timestamp);
 }
 
+// Colores extraídos exactamente de tu imagen de referencia
+function obtenerColorTipo($tipo)
+{
+    $tipo = strtoupper(trim($tipo));
+    switch ($tipo) {
+        case 'MANHWA':
+            return '#1a9341'; // Verde de la imagen
+        case 'MANGA':
+            return '#215bc2'; // Azul de la imagen
+        case 'NOVELA':
+            return '#b71b29'; // Rojo oscuro de la imagen
+        case 'DONGHUA':
+            return '#17a2b8';
+        case 'MANHUA':
+            return '#6f42c1';
+        default:
+            return '#6c757d';
+    }
+}
+
+function obtenerColorDemografia($demo)
+{
+    $demo = strtoupper(trim($demo));
+    switch ($demo) {
+        case 'SEINEN':
+            return '#bd1e2c'; // Rojo de la imagen
+        case 'SHOUNEN':
+            return '#d39200'; // Dorado/Naranja de la imagen
+        case 'SHOUJO':
+            return '#b12f9d'; // Morado/Rosa de la imagen
+        case 'JOSEI':
+            return '#6610f2';
+        case 'KODOMO':
+            return '#20c997';
+        default:
+            return '#343a40';
+    }
+}
+
 $busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
 $filtro_genero = isset($_GET['genero']) ? $conn->real_escape_string($_GET['genero']) : '';
 $filtro_autor = isset($_GET['autor']) ? $conn->real_escape_string($_GET['autor']) : '';
@@ -62,7 +101,7 @@ if (empty($busqueda) && empty($filtro_genero) && empty($filtro_autor) && $pagina
     }
 
     $sqlNuevos = "SELECT c.id as cap_id, c.slug as cap_slug, c.titulo as cap_titulo, c.fecha_subida, 
-                         o.id as obra_id, o.slug as obra_slug, o.titulo as obra_titulo, o.portada,
+                         o.id as obra_id, o.slug as obra_slug, o.titulo as obra_titulo, o.portada, o.tipo_obra, o.demografia,
                          (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media
                   FROM capitulos c
                   JOIN obras o ON c.obra_id = o.id
@@ -86,12 +125,10 @@ while ($row = $resGeneros->fetch_assoc()) {
     }
 }
 sort($lista_generos);
-// -----------------------------------------------
 
 // --- MAGIA: EXTRAER AUTORES DINÁMICOS ÚNICOS ---
 $sqlAutores = "SELECT DISTINCT autor FROM obras WHERE autor IS NOT NULL AND autor != '' ORDER BY autor ASC";
 $resAutores = $conn->query($sqlAutores);
-// -----------------------------------------------
 
 $parametros_url = $_GET;
 unset($parametros_url['pagina']);
@@ -115,6 +152,10 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
                 <?php
                 $nota_carrusel = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-';
                 $imgPortadaDest = (strpos($obra['portada'], 'http') === 0) ? $obra['portada'] : '/' . ltrim($obra['portada'], '/');
+                $tipoObra = !empty($obra['tipo_obra']) ? strtoupper($obra['tipo_obra']) : 'DESCONOCIDO';
+                $colorTipo = obtenerColorTipo($tipoObra);
+                $demoObra = !empty($obra['demografia']) ? strtoupper($obra['demografia']) : 'DESCONOCIDO';
+                $colorDemo = obtenerColorDemografia($demoObra);
                 ?>
 
                 <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?> hero-item">
@@ -123,12 +164,24 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
 
                     <div class="container position-relative h-100 d-flex align-items-center justify-content-center">
                         <div class="row w-100 align-items-center">
-                            <div class="col-md-4 text-center d-none d-md-block">
-                                <img src="<?php echo htmlspecialchars($imgPortadaDest); ?>" class="rounded shadow-lg"
+                            <div class="col-md-4 text-center d-none d-md-block position-relative">
+                                <img src="<?php echo htmlspecialchars($imgPortadaDest); ?>"
+                                    class="rounded shadow-lg position-relative z-2"
                                     style="height: 350px; width: 240px; object-fit: cover; border: 3px solid rgba(255,255,255,0.2); transform: rotate(-3deg);">
                             </div>
                             <div class="col-md-8 text-white p-4">
-                                <span class="badge bg-warning text-dark mb-3 text-uppercase fw-bold">Recomendado</span>
+                                <div class="d-flex flex-wrap gap-2 mb-3">
+                                    <span class="badge bg-warning text-dark text-uppercase fw-bold">Recomendado</span>
+                                    <?php if ($tipoObra !== 'DESCONOCIDO'): ?>
+                                        <span class="badge text-uppercase fw-bold"
+                                            style="background-color: <?php echo $colorTipo; ?>;"><?php echo htmlspecialchars($tipoObra); ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($demoObra !== 'DESCONOCIDO'): ?>
+                                        <span class="badge text-uppercase fw-bold"
+                                            style="background-color: <?php echo $colorDemo; ?>;"><?php echo htmlspecialchars($demoObra); ?></span>
+                                    <?php endif; ?>
+                                </div>
+
                                 <h1 class="display-4 fw-bold mb-2"><?php echo htmlspecialchars($obra['titulo']); ?></h1>
 
                                 <div class="d-flex align-items-center mb-2">
@@ -178,28 +231,53 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
                 <span class="badge bg-danger">NEW</span>
             </div>
 
-            <div class="d-flex gap-3 overflow-auto pb-3 scroll-novedades">
+            <div class="d-flex gap-3 overflow-auto pt-2 pb-4 px-2 scroll-novedades">
                 <?php while ($cap = $resNuevos->fetch_assoc()): ?>
                     <?php
                     $nota_nov = $cap['nota_media'] ? round($cap['nota_media'], 1) : '-';
                     $imgPortadaNov = (strpos($cap['portada'], 'http') === 0) ? $cap['portada'] : '/' . ltrim($cap['portada'], '/');
+                    $tipoObraNov = !empty($cap['tipo_obra']) ? strtoupper($cap['tipo_obra']) : 'DESCONOCIDO';
+                    $colorTipoNov = obtenerColorTipo($tipoObraNov);
+                    $demoObraNov = !empty($cap['demografia']) ? strtoupper($cap['demografia']) : 'DESCONOCIDO';
+                    $colorDemoNov = obtenerColorDemografia($demoObraNov);
                     ?>
 
-                    <div class="card shadow-sm border-0 flex-shrink-0" style="width: 180px;">
+                    <div class="card shadow-sm border hover-effect bg-white flex-shrink-0" style="width: 180px;">
                         <a href="/obra/<?php echo urlencode($cap['obra_slug']); ?>/<?php echo urlencode($cap['cap_slug']); ?>"
-                            class="text-decoration-none text-dark">
-                            <div class="position-relative">
-                                <img src="<?php echo htmlspecialchars($imgPortadaNov); ?>" class="card-img-top"
-                                    style="height: 250px; object-fit: cover; filter: brightness(0.9);" alt="Portada">
-                                <span class="position-absolute top-0 end-0 badge bg-danger m-1 shadow-sm">UP</span>
+                            class="text-decoration-none text-dark d-flex flex-column h-100">
+
+                            <div class="position-relative overflow-hidden"
+                                style="border-top-left-radius: 8px; border-top-right-radius: 8px; height: 250px;">
+
+                                <div class="position-absolute w-100 text-center fw-bold text-white py-1 z-3"
+                                    style="top: 0; left: 0; background-color: <?php echo $colorTipoNov; ?>; font-size: 0.75rem; letter-spacing: 1px;">
+                                    <?php echo htmlspecialchars($tipoObraNov); ?>
+                                </div>
 
                                 <span
-                                    class="position-absolute bottom-0 start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center">
+                                    class="position-absolute start-0 badge bg-dark bg-opacity-75 m-1 shadow-sm d-flex align-items-center z-3"
+                                    style="top: 28px;">
                                     <i class="fas fa-star text-warning me-1" style="font-size: 0.65rem;"></i>
                                     <?php echo $nota_nov; ?>
                                 </span>
+
+                                <span class="position-absolute end-0 badge bg-danger m-1 shadow-sm z-3"
+                                    style="top: 28px;">UP</span>
+
+                                <img src="<?php echo htmlspecialchars($imgPortadaNov); ?>"
+                                    class="position-absolute top-0 start-0 w-100 h-100 zoom-img"
+                                    style="object-fit: cover; filter: brightness(0.9); border-bottom: 1px solid #eaeaea;"
+                                    alt="Portada">
+
+                                <?php if ($demoObraNov !== 'DESCONOCIDO'): ?>
+                                    <div class="position-absolute w-100 text-center fw-bold text-white py-1 z-3"
+                                        style="bottom: 0; left: 0; background-color: <?php echo $colorDemoNov; ?>; font-size: 0.70rem; letter-spacing: 1px;">
+                                        <?php echo htmlspecialchars($demoObraNov); ?>
+                                    </div>
+                                <?php endif; ?>
+
                             </div>
-                            <div class="card-body p-2">
+                            <div class="card-body p-2 mt-auto">
                                 <h6 class="card-title fw-bold text-truncate mb-0" style="font-size: 0.9rem;"
                                     title="<?php echo htmlspecialchars($cap['obra_titulo']); ?>">
                                     <?php echo htmlspecialchars($cap['obra_titulo']); ?>
@@ -278,21 +356,41 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
                 <?php
                 $nota_cat = $obra['nota_media'] ? round($obra['nota_media'], 1) : '-';
                 $imgPortadaCat = (strpos($obra['portada'], 'http') === 0) ? $obra['portada'] : '/' . ltrim($obra['portada'], '/');
+
+                $tipoObraCat = !empty($obra['tipo_obra']) ? strtoupper($obra['tipo_obra']) : 'DESCONOCIDO';
+                $colorTipoCat = obtenerColorTipo($tipoObraCat);
+
+                $demoObraCat = !empty($obra['demografia']) ? strtoupper($obra['demografia']) : 'DESCONOCIDO';
+                $colorDemoCat = obtenerColorDemografia($demoObraCat);
                 ?>
 
                 <div class="col">
                     <a href="/obra/<?php echo urlencode($obra['slug']); ?>" class="text-decoration-none text-dark">
-                        <div class="card-obra h-100 shadow-sm overflow-hidden">
-                            <div class="position-relative" style="padding-top: 145%;">
+                        <div class="card-obra h-100 shadow-sm border hover-effect bg-white d-flex flex-column">
+
+                            <div class="position-relative overflow-hidden"
+                                style="border-top-left-radius: 8px; border-top-right-radius: 8px; padding-top: 145%;">
+                                <div class="position-absolute w-100 text-center fw-bold text-white py-1 z-2"
+                                    style="top: 0; left: 0; background-color: <?php echo $colorTipoCat; ?>; font-size: 0.8rem; letter-spacing: 1px;">
+                                    <?php echo htmlspecialchars($tipoObraCat); ?>
+                                </div>
+
                                 <img src="<?php echo htmlspecialchars($imgPortadaCat); ?>"
                                     class="position-absolute top-0 start-0 w-100 h-100 zoom-img"
-                                    style="object-fit: cover; border-bottom: 1px solid #eee;" alt="Portada">
+                                    style="object-fit: cover; border-bottom: 1px solid #eaeaea;" alt="Portada">
+
+                                <?php if ($demoObraCat !== 'DESCONOCIDO'): ?>
+                                    <div class="position-absolute w-100 text-center fw-bold text-white py-1 z-2"
+                                        style="bottom: 0; left: 0; background-color: <?php echo $colorDemoCat; ?>; font-size: 0.75rem; letter-spacing: 1px;">
+                                        <?php echo htmlspecialchars($demoObraCat); ?>
+                                    </div>
+                                <?php endif; ?>
                             </div>
 
                             <div class="card-body p-2 d-flex flex-column justify-content-between">
                                 <div>
                                     <div class="d-flex justify-content-between align-items-start mb-1">
-                                        <h6 class="card-title fw-bold text-truncate mb-0 text-dark pe-1"
+                                        <h6 class="card-title fw-bold text-truncate mb-0 pe-1 text-dark"
                                             title="<?php echo htmlspecialchars($obra['titulo']); ?>" style="max-width: 75%;">
                                             <?php echo htmlspecialchars($obra['titulo']); ?>
                                         </h6>
@@ -307,19 +405,6 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
                                         <?php echo htmlspecialchars($obra['autor']); ?>
                                     </small>
                                 </div>
-
-                                <div class="mt-1 d-flex flex-wrap gap-1">
-                                    <?php
-                                    if (!empty($obra['generos'])) {
-                                        $generos_arr = explode(',', $obra['generos']);
-                                        $generos_arr = array_slice($generos_arr, 0, 3);
-                                        foreach ($generos_arr as $g) {
-                                            echo '<span class="badge badge-iori me-1 mb-1" style="font-size: 0.65rem;">' . htmlspecialchars(trim($g)) . '</span>';
-                                        }
-                                    }
-                                    ?>
-                                </div>
-
                             </div>
                         </div>
                     </a>
@@ -363,5 +448,25 @@ $url_base = "/?" . http_build_query($parametros_url) . (empty($parametros_url) ?
     <?php endif; ?>
 
 </main>
+
+<style>
+    .hover-effect {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border-radius: 8px;
+    }
+
+    .hover-effect:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .zoom-img {
+        transition: transform 0.4s ease;
+    }
+
+    .hover-effect:hover .zoom-img {
+        transform: scale(1.03);
+    }
+</style>
 
 <?php include 'includes/footer.php'; ?>

@@ -2,35 +2,54 @@
    VARIABLES GLOBALES - IORISCANS
 ========================================= */
 :root {
-    --primary-color: #333;       /* Texto principal */
-    --text-muted: #666;          /* Texto secundario */
-    --star-color: #fbbf24;       /* Color de las estrellas */
-    
+    --primary-color: #333;
+    /* Texto principal */
+    --text-muted: #666;
+    /* Texto secundario */
+    --star-color: #fbbf24;
+    /* Color de las estrellas */
+
     /* Identidad IoriScans */
-    --iori-primary: #0a8688;     /* Tu color principal (Cian oscuro) */
-    --iori-hover: #076b6d;       /* Hover oscuro para botones */
-    --iori-light: #e7f3f3;       /* Fondo súper clarito tintado */
+    --iori-primary: #0a8688;
+    /* Tu color principal (Cian oscuro) */
+    --iori-hover: #076b6d;
+    /* Hover oscuro para botones */
+    --iori-light: #e7f3f3;
+    /* Fondo súper clarito tintado */
 }
 
 /* =========================================
    RESETEO Y BASE
 ========================================= */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { overflow-y: scroll; }
-body { 
-    font-family: 'Inter', sans-serif; 
-    background-color: #fbfbfb; 
-    color: var(--primary-color); 
-    display: flex; 
-    flex-direction: column; 
-    min-height: 100vh; 
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    overflow-y: scroll;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #fbfbfb;
+    color: var(--primary-color);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
 /* =========================================
    CLASES IORISCANS (UTLIDADES)
 ========================================= */
-.text-iori { color: var(--iori-primary) !important; }
-.bg-iori { background-color: var(--iori-primary) !important; }
+.text-iori {
+    color: var(--iori-primary) !important;
+}
+
+.bg-iori {
+    background-color: var(--iori-primary) !important;
+}
 
 .btn-iori {
     background-color: var(--iori-primary);
@@ -38,10 +57,11 @@ body {
     border: none;
     transition: all 0.3s ease;
 }
+
 .btn-iori:hover {
     background-color: var(--iori-hover);
     color: white;
-    transform: translateY(-2px); 
+    transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(10, 134, 136, 0.3);
 }
 
@@ -49,134 +69,375 @@ body {
    ESTRUCTURA PRINCIPAL
 ========================================= */
 header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 1.5rem 5%; border-bottom: 1px solid #eaeaea;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 5%;
+    border-bottom: 1px solid #eaeaea;
     background: white;
 }
-.logo { font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit; cursor: pointer; }
-nav ul { display: flex; list-style: none; gap: 2rem; }
-nav a { text-decoration: none; color: var(--primary-color); font-weight: 600; font-size: 0.95rem; cursor: pointer; }
 
-main { padding: 2rem 5%; max-width: 1400px; margin: 0 auto; flex: 1; width: 100%; }
+.logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+nav ul {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+}
+
+nav a {
+    text-decoration: none;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+main {
+    padding: 2rem 5%;
+    max-width: 1400px;
+    margin: 0 auto;
+    flex: 1;
+    width: 100%;
+}
 
 /* =========================================
    COMPONENTES INDEX (CARRUSEL Y NOVEDADES)
 ========================================= */
-.hero-item { height: 450px; background-color: #111; }
-.hero-bg-blur {
-    position: absolute; top:0; left:0; width:100%; height:100%; 
-    filter: blur(8px) brightness(0.3);
-    background-size: cover; background-position: center;
+.hero-item {
+    height: 450px;
+    background-color: #111;
 }
 
-.scroll-novedades { scrollbar-width: thin; scrollbar-color: var(--iori-primary) #f1f1f1; }
-.scroll-novedades::-webkit-scrollbar { height: 6px; }
-.scroll-novedades::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-.scroll-novedades::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
-.scroll-novedades::-webkit-scrollbar-thumb:hover { background: var(--iori-primary); }
+.hero-bg-blur {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    filter: blur(8px) brightness(0.3);
+    background-size: cover;
+    background-position: center;
+}
+
+.scroll-novedades {
+    scrollbar-width: thin;
+    scrollbar-color: var(--iori-primary) #f1f1f1;
+}
+
+.scroll-novedades::-webkit-scrollbar {
+    height: 6px;
+}
+
+.scroll-novedades::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.scroll-novedades::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+.scroll-novedades::-webkit-scrollbar-thumb:hover {
+    background: var(--iori-primary);
+}
 
 /* =========================================
    GRID CATÁLOGO Y TARJETAS
 ========================================= */
-.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2rem; }
+.catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 2rem;
+}
 
-.card-obra { 
-    transition: transform 0.2s ease, box-shadow 0.2s ease; 
+.card-obra {
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
     border-radius: 8px;
     background: #fff;
     border: 1px solid #eaeaea;
+    /* Aseguramos que la tarjeta en sí no oculte el overflow, lo hace el div interior */
 }
-.card-obra:hover { 
-    transform: translateY(-5px); 
-    box-shadow: 0 10px 20px rgba(0,0,0,0.08) !important; 
+
+.card-obra:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12) !important;
     border-color: var(--iori-primary);
 }
-.zoom-img { transition: transform 0.4s ease; }
-.card-obra:hover .zoom-img { transform: scale(1.03); }
+
+.zoom-img {
+    transition: transform 0.5s ease;
+}
+
+.card-obra:hover .zoom-img {
+    transform: scale(1.05);
+}
 
 /* =========================================
    PÁGINA DETALLE DE OBRA
 ========================================= */
-.detalle-header { display: flex; gap: 2.5rem; margin-bottom: 3rem; flex-wrap: wrap; }
-.detalle-img { width: 280px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.15); }
-.detalle-info { flex: 1; }
-.detalle-titulo { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; line-height: 1.2; }
-.detalle-meta { color: var(--text-muted); margin-bottom: 1.5rem; font-size: 1.1rem; }
-.detalle-sinopsis { line-height: 1.7; color: #444; margin-bottom: 2rem; max-width: 800px; }
-
-.contenedor-capitulos { border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; max-height: 500px; overflow-y: auto; }
-.capitulo-item { 
-    padding: 1rem 1.5rem; border-bottom: 1px solid #eaeaea; display: flex; justify-content: space-between; align-items: center;
-    cursor: pointer; text-decoration: none; color: inherit; transition: background 0.2s;
+.detalle-header {
+    display: flex;
+    gap: 2.5rem;
+    margin-bottom: 3rem;
+    flex-wrap: wrap;
 }
-.capitulo-item:hover { background-color: var(--iori-light); }
+
+.detalle-img {
+    width: 280px;
+    border-radius: 12px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.detalle-info {
+    flex: 1;
+}
+
+.detalle-titulo {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+}
+
+.detalle-meta {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+
+.detalle-sinopsis {
+    line-height: 1.7;
+    color: #444;
+    margin-bottom: 2rem;
+    max-width: 800px;
+}
+
+.contenedor-capitulos {
+    border: 1px solid #eaeaea;
+    border-radius: 8px;
+    overflow: hidden;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.capitulo-item {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #eaeaea;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.2s;
+}
+
+.capitulo-item:hover {
+    background-color: var(--iori-light);
+}
 
 /* =========================================
    LOGIN Y FORMULARIOS
 ========================================= */
-.login-container { max-width: 400px; margin: 5rem auto; padding: 2rem; border: 1px solid #eaeaea; border-radius: 12px; text-align: center; }
-.login-input { width: 100%; padding: 0.8rem; margin-bottom: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+.login-container {
+    max-width: 400px;
+    margin: 5rem auto;
+    padding: 2rem;
+    border: 1px solid #eaeaea;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.login-input {
+    width: 100%;
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
 
 /* =========================================
    MENÚ DESPLEGABLE (DROPDOWN)
 ========================================= */
-.dropdown { position: relative; display: inline-block; }
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
 .dropdown-menu {
-    display: none; position: absolute; right: 0; top: 100%;
-    background-color: white; min-width: 200px;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1); border-radius: 8px;
-    z-index: 1000; padding: 0.5rem 0; text-align: left;
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: white;
+    min-width: 200px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    z-index: 1000;
+    padding: 0.5rem 0;
+    text-align: left;
     border: 1px solid #eaeaea;
 }
-.dropdown:hover .dropdown-menu { display: block; }
-.dropdown-item { display: block; padding: 10px 15px; color: #333; text-decoration: none; transition: background 0.2s; }
-.dropdown-item:hover { background-color: var(--iori-light); color: var(--iori-primary); font-weight: 600; }
-.dropdown-divider { height: 1px; background-color: #eaeaea; margin: 5px 0; }
+
+.dropdown:hover .dropdown-menu {
+    display: block;
+}
+
+.dropdown-item {
+    display: block;
+    padding: 10px 15px;
+    color: #333;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: var(--iori-light);
+    color: var(--iori-primary);
+    font-weight: 600;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background-color: #eaeaea;
+    margin: 5px 0;
+}
 
 /* =========================================
    VISOR DE LECTURA (MANGA/MANHWA)
 ========================================= */
-.visor-body { background-color: #0d0d0d; color: #fff; overflow-x: hidden; }
-.visor-barra { 
-    background: #000; padding: 1rem; position: sticky; 
-    top: 0; display: flex; justify-content: space-between; 
-    align-items: center; z-index: 200; border-bottom: 1px solid #222;
+.visor-body {
+    background-color: #0d0d0d;
+    color: #fff;
+    overflow-x: hidden;
 }
-.btn-volver { background: none; border: none; font-size: 1rem; color: #aaa; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; text-decoration: none; transition: color 0.2s; }
-.btn-volver:hover { color: white; }
 
-.visor-contenido { 
-    max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; padding-bottom: 5rem;
-    gap: 0 !important; line-height: 0 !important; font-size: 0 !important; 
+.visor-barra {
+    background: #000;
+    padding: 1rem;
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 200;
+    border-bottom: 1px solid #222;
 }
-.pagina-manga { 
-    max-width: 100%; display: block; width: 100%; height: auto; 
-    margin: 0 !important; padding: 0 !important; border: none !important;
+
+.btn-volver {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.btn-volver:hover {
+    color: white;
+}
+
+.visor-contenido {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 5rem;
+    gap: 0 !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+}
+
+.pagina-manga {
+    max-width: 100%;
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
 }
 
 /* NAVEGACIÓN DE CAPÍTULOS DENTRO DEL VISOR */
 .navegacion-capitulos {
-    width: 100%; max-width: 800px; margin: 0 auto; padding: 2rem 1rem;
-    display: flex; justify-content: space-between; gap: 1rem;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
     background-color: #0d0d0d;
 }
+
 .btn-nav-cap {
-    flex: 1; padding: 15px; border-radius: 8px; text-align: center; text-decoration: none;
-    font-weight: bold; color: white; transition: background 0.2s; border: 1px solid #333;
-    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    flex: 1;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    text-decoration: none;
+    font-weight: bold;
+    color: white;
+    transition: background 0.2s;
+    border: 1px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
 }
-.btn-anterior { background-color: #262626; }
-.btn-anterior:hover { background-color: #404040; color: white; }
+
+.btn-anterior {
+    background-color: #262626;
+}
+
+.btn-anterior:hover {
+    background-color: #404040;
+    color: white;
+}
 
 /* Aquí cambiamos el azul por defecto por tu color de IoriScans */
-.btn-siguiente { background-color: var(--iori-primary); border-color: var(--iori-primary); }
-.btn-siguiente:hover { background-color: var(--iori-hover); color: white; }
+.btn-siguiente {
+    background-color: var(--iori-primary);
+    border-color: var(--iori-primary);
+}
 
-.btn-disabled { background-color: #1a1a1a; color: #666; cursor: not-allowed; border-color: #333; }
+.btn-siguiente:hover {
+    background-color: var(--iori-hover);
+    color: white;
+}
+
+.btn-disabled {
+    background-color: #1a1a1a;
+    color: #666;
+    cursor: not-allowed;
+    border-color: #333;
+}
 
 .btn-mini-nav {
-    width: 36px; height: 36px; padding: 0 !important; display: inline-flex; 
-    align-items: center; justify-content: center; border-radius: 6px; line-height: 1;
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    line-height: 1;
 }
 
 /* =========================================
@@ -197,7 +458,7 @@ main { padding: 2rem 5%; max-width: 1400px; margin: 0 auto; flex: 1; width: 100%
     transition: all 0.3s ease;
 }
 
-.btn-outline-iori:hover, 
+.btn-outline-iori:hover,
 .btn-outline-iori:focus,
 .btn-outline-iori[aria-expanded="true"] {
     background-color: var(--iori-primary);
@@ -209,8 +470,10 @@ main { padding: 2rem 5%; max-width: 1400px; margin: 0 auto; flex: 1; width: 100%
    FOOTER PERSONALIZADO - IORISCANS
 ========================================= */
 .footer-iori {
-    background-color: #111; /* Negro profundo */
-    border-top: 3px solid var(--iori-primary); /* Línea de marca arriba */
+    background-color: #111;
+    /* Negro profundo */
+    border-top: 3px solid var(--iori-primary);
+    /* Línea de marca arriba */
     color: white;
 }
 
@@ -236,7 +499,8 @@ main { padding: 2rem 5%; max-width: 1400px; margin: 0 auto; flex: 1; width: 100%
 
 .hover-white:hover {
     color: white !important;
-    padding-left: 5px; /* Pequeño efecto de desplazamiento */
+    padding-left: 5px;
+    /* Pequeño efecto de desplazamiento */
     transition: all 0.2s ease;
 }
 

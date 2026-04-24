@@ -1,35 +1,47 @@
-# 1. Apagar el defecto de Apache
+# ==================================================================
+# CONFIGURACIÓN DEL SERVIDOR Y ENRUTAMIENTO (IORISCANS)
+# ==================================================================
+
+# Desactivamos AcceptPathInfo para evitar comportamientos extraños de Apache con las rutas
 AcceptPathInfo Off
 
-# 2. Página 404
+# Definimos nuestra página de error 404 personalizada
 ErrorDocument 404 /404.php
 
-# 3. Activar el motor de reescritura
+# Activamos mod_rewrite para poder crear URLs amigables
 RewriteEngine On
 
-# 4. Magia para quitar "index.php" inicial
+# Redirección 301 para evitar contenido duplicado (SEO). Forzamos que la raíz sea "/" y no "/index.php"
 RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /index\.php\ HTTP/
 RewriteRule ^index\.php$ / [R=301,L]
 
-# 5. Evitar que las reglas afecten a archivos físicos reales (como los CSS, JS o fotos)
+# Protegemos los assets: Si la petición es para un archivo (foto, css, js) o directorio que ya existe físicamente, abortamos las reescrituras
 RewriteCond %{REQUEST_FILENAME} -d [OR]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# --- 6. TUS RUTAS JERÁRQUICAS (Manga y Foro) ---
 
-# Visor: /obra/solo-leveling/capitulo-0-0
+# --- ENRUTAMIENTO SEMÁNTICO (Catálogo, Visor y Foro) ---
+
+# 1. Visor de lectura (Ej: /obra/solo-leveling/capitulo-0-0)
 RewriteRule ^obra/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)/?$ visor.php?obraSlug=$1&capSlug=$2 [L,QSA]
 
-# Obra: /obra/solo-leveling
+# 2. Detalles de la obra (Ej: /obra/solo-leveling)
 RewriteRule ^obra/([a-zA-Z0-9-]+)/?$ detalle.php?slug=$1 [L,QSA]
 
-# Tema del Foro: /foro/que-opinas-sobre-solo-leveling
+# 3. Foro: Rutas estáticas prioritarias 
+# IMPORTANTE: Se declaran antes de las dinámicas para que el comodín no las sobreescriba.
+RewriteRule ^foro/agregar-tema/?$ agregar_tema.php [L]
+RewriteRule ^foro/editar-tema/([0-9]+)/?$ editar_tema.php?id=$1 [L,QSA]
+RewriteRule ^foro/editar-respuesta/([0-9]+)/?$ editar_respuesta.php?id=$1 [L,QSA]
+
+# 4. Foro: Vista de un tema específico (Ruta comodín)
 RewriteRule ^foro/([a-zA-Z0-9-]+)/?$ tema.php?slug=$1 [L,QSA]
 
 
-# --- 7. AUTOMATIZACIÓN DE ARCHIVOS GENERALES (Quitar .php) ---
-# Esta regla hace que CUALQUIER archivo que exista en tu servidor (perfil.php, agregar_obra.php, etc)
-# pueda abrirse directamente sin escribir el .php al final.
+# --- RUTAS GENERALES (Ocultar .php) ---
+
+# Permite acceder a cualquier script (ej. /perfil o /login) sin escribir la extensión .php.
+# Comprobamos primero si existe el archivo añadiendo .php al final de la petición.
 RewriteCond %{REQUEST_FILENAME}.php -f
 RewriteRule ^([^\.]+)$ $1.php [NC,L,QSA]

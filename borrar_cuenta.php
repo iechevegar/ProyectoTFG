@@ -2,22 +2,35 @@
 session_start();
 require 'includes/db.php';
 
-// Si no está logueado, fuera
+// =========================================================================================
+// 1. CAPA DE SEGURIDAD: VERIFICACIÓN DE SESIÓN ACTIVA
+// =========================================================================================
+// Evitamos la ejecución en frío. Si un visitante no autenticado intenta acceder
+// a este endpoint, cortamos el hilo y lo redirigimos al portal de acceso.
 if (!isset($_SESSION['usuario'])) {
-    header("Location: login.php");
+    header("Location: /login");
     exit();
 }
 
-// --- SEGURIDAD CRÍTICA (ANTI-CSRF) ---
-// Comprobamos que la orden viene obligatoriamente de hacer clic en el botón POST del formulario.
-// Si alguien intenta entrar por URL (GET), la petición se bloquea.
+// =========================================================================================
+// 2. PREVENCIÓN CSRF Y RESTRICCIÓN DE VERBO HTTP
+// =========================================================================================
+// Aplicamos una política estricta de verbos HTTP. Las acciones destructivas (Eliminar Cuenta)
+// DEBEN realizarse mediante POST. Si se intenta forzar vía GET (ej: escribiendo la URL en 
+// el navegador o mediante un ataque de Cross-Site Request Forgery con una etiqueta <img>), 
+// la petición es interceptada y rechazada.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: perfil.php?error=Acción no permitida por seguridad.");
+    // Redirigimos al perfil inyectando el error por GET para su renderizado en la vista
+    header("Location: /perfil?error=" . urlencode("Acción no permitida por políticas de seguridad."));
     exit();
 }
-// -------------------------------------
 
-// Obtener datos del usuario para borrar su foto primero
+
+// =========================================================================================
+// 3. EXTRACCIÓN DE IDENTIDAD Y METADATOS DE ARCHIVOS
+// =========================================================================================
+// Antes de destruir el registro en la BD, necesitamos recuperar la ruta del avatar del usuario.
+// Usamos Prepared Statements para prevenir Inyección SQL durante la validación de la identidad.
 $nombreUser = $_SESSION['usuario'];
 $sql = "SELECT id, foto FROM usuarios WHERE nombre = ?";
 $stmt = $conn->prepare($sql);
@@ -29,37 +42,54 @@ if ($user = $res->fetch_assoc()) {
     $idUsuario = $user['id'];
     $rutaFoto = $user['foto'];
 
-    // 1. BORRAR FOTO DEL SERVIDOR (Si tiene una y existe)
+    // =========================================================================================
+    // 4. MANTENIMIENTO DEL FILE SYSTEM (PREVENCIÓN DE STORAGE LEAKS)
+    // =========================================================================================
+    // Si el usuario subió una imagen personalizada, debemos eliminarla físicamente del disco.
+    // Si omitimos este paso, el servidor terminaría acumulando "archivos huérfanos".
     if (!empty($rutaFoto) && file_exists($rutaFoto)) {
-        // Verificamos que no sea una imagen de internet
+        // Validamos que la ruta sea local y no una URL externa (como los avatares generados por API)
+        // para evitar que la función unlink() arroje excepciones de I/O.
         if (strpos($rutaFoto, 'http') === false) {
             unlink($rutaFoto);
         }
     }
 
-    // 2. BORRAR USUARIO DE LA BASE DE DATOS
-    // Al borrar el usuario, MySQL borrará automáticamente sus favoritos (ON DELETE CASCADE)
+    // =========================================================================================
+    // 5. PURGA EN LA BASE DE DATOS (INTEGRIDAD REFERENCIAL)
+    // =========================================================================================
+    // Ejecutamos el borrado del usuario. 
+    // NOTA ARQUITECTÓNICA: Delegamos la eliminación de las dependencias (favoritos, comentarios, 
+    // temas de foro, capítulos leídos) al motor de la base de datos MySQL mediante la restricción 
+    // ON DELETE CASCADE definida en las Foreign Keys. Esto asegura transacciones atómicas limpias.
     $sqlDelete = "DELETE FROM usuarios WHERE id = ?";
     $stmtDelete = $conn->prepare($sqlDelete);
     $stmtDelete->bind_param("i", $idUsuario);
 
     if ($stmtDelete->execute()) {
-        // 3. DESTRUIR SESIÓN
+        
+        // =========================================================================================
+        // 6. GESTIÓN DEL CICLO DE VIDA DE LA SESIÓN (FLASH MESSAGING)
+        // =========================================================================================
+        // 1. Destruimos completamente la sesión actual para borrar rastros de autenticación.
         session_destroy();
         
-        // Iniciamos una sesión temporal solo para pasar el mensaje de éxito al login
+        // 2. Iniciamos una nueva sesión "limpia" de forma temporal.
+        // Esto obedece al patrón Flash Message: necesitamos una forma de pasar un mensaje de éxito 
+        // a la página de login que sobreviva a la redirección HTTP, pero sin mantener al usuario logueado.
         session_start();
         $_SESSION['msg_exito'] = "Cuenta eliminada correctamente. ¡Te echaremos de menos!";
         
-        header("Location: login.php");
+        header("Location: /login");
         exit();
     } else {
-        // Si falla algo
-        header("Location: perfil.php?error=No se pudo eliminar la cuenta.");
+        // Fallback en caso de que la restricción relacional o el motor SQL fallen
+        header("Location: /perfil?error=" . urlencode("Error interno: No se pudo purgar la cuenta."));
         exit();
     }
 } else {
-    header("Location: index.php");
+    // Si el usuario de la sesión no se encuentra en la BD (ej. cuenta ya borrada por admin concurrentemente)
+    header("Location: /");
     exit();
 }
 ?>

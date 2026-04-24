@@ -1,36 +1,28 @@
-/* =========================================
-   VARIABLES GLOBALES - IORISCANS
-========================================= */
+/* =========================================================================================
+   1. DESIGN TOKENS (VARIABLES GLOBALES) Y RESET
+========================================================================================= */
+/* Definición de la paleta de colores corporativa (Single Source of Truth). 
+   Permite cambiar la identidad visual de toda la plataforma modificando solo estas líneas, 
+   facilitando además la implementación del Modo Oscuro. */
 :root {
     --primary-color: #333;
-    /* Texto principal */
     --text-muted: #666;
-    /* Texto secundario */
     --star-color: #fbbf24;
-    /* Color de las estrellas */
-
-    /* Identidad IoriScans */
     --iori-primary: #0a8688;
-    /* Tu color principal (Cian oscuro) */
     --iori-hover: #076b6d;
-    /* Hover oscuro para botones */
     --iori-light: #e7f3f3;
-    /* Fondo súper clarito tintado */
 }
 
-/* =========================================
-   RESETEO Y BASE
-========================================= */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* Reset Universal de Box Model: Garantiza que el padding y el border no sumen 
+   anchura extra a los elementos, previniendo desbordamientos horizontales. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-html {
-    overflow-y: scroll;
-}
+/* Forzamos el scrollbar vertical siempre visible para evitar el salto de página (layout shift) 
+   al navegar entre vistas cortas y largas. */
+html { overflow-y: scroll; }
 
+/* Arquitectura de "Sticky Footer" usando Flexbox: 
+   Garantiza que el footer siempre se quede abajo aunque la página tenga poco contenido. */
 body {
     font-family: 'Inter', sans-serif;
     background-color: #fbfbfb;
@@ -39,474 +31,369 @@ body {
     flex-direction: column;
     min-height: 100vh;
 }
+main { padding: 2rem 5%; max-width: 1400px; margin: 0 auto; flex: 1; width: 100%; }
 
-/* =========================================
-   CLASES IORISCANS (UTLIDADES)
-========================================= */
-.text-iori {
+/* =========================================================================================
+   2. CLASES DE UTILIDAD (ATOMIC CSS) Y MICRO-INTERACCIONES
+========================================================================================= */
+.text-iori { color: var(--iori-primary) !important; }
+.bg-iori { background-color: var(--iori-primary) !important; }
+.text-orange { color: #fd7e14 !important; }
+.hover-iori { transition: color 0.2s ease-in-out; }
+.hover-iori:hover { color: var(--iori-primary) !important; text-decoration: underline !important; }
+.transition-colors { transition: all 0.2s ease-in-out; }
+
+/* Transiciones aceleradas por hardware (transform) para evitar repintados (re-paints) costosos en la CPU */
+.btn-iori { background-color: var(--iori-primary); color: white; border: none; transition: all 0.3s ease; }
+
+.btn-outline-iori { color: var(--iori-primary); border: 2px solid var(--iori-primary); background-color: transparent; transition: all 0.3s ease; }
+.btn-outline-iori:hover, .btn-outline-iori:focus, .btn-outline-iori[aria-expanded="true"] { background-color: var(--iori-primary); color: white; box-shadow: 0 4px 8px rgba(10, 134, 136, 0.2); }
+.badge-iori { background-color: var(--iori-light); color: var(--iori-primary); border: 1px solid rgba(10, 134, 136, 0.25); font-weight: 600; padding: 0.35rem 0.65rem; }
+
+.hover-white:hover { color: white !important; padding-left: 5px; transition: all 0.2s ease; }
+.hover-bg-light:hover { background-color: #f8f9fa !important; }
+.hover-text-iori { transition: color 0.2s; }
+.hover-text-iori:hover { color: var(--iori-primary) !important; }
+
+.zoom-img { transition: transform 0.4s ease; }
+.hover-scale { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.hover-scale:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
+.text-shadow { text-shadow: 2px 2px 4px rgba(0,0,0,0.6); }
+.opacity-30 { opacity: 0.3; }
+
+/* Prevención de desbordamiento en cadenas de texto largas (ej. links pegados en el foro) */
+.break-word { word-break: break-word; }
+
+/* =========================================================================================
+   3. COMPONENTES ESTRUCTURALES: HEADER, FOOTER Y DROPDOWN
+========================================================================================= */
+.header-logo { height: 45px; }
+.search-input-header { min-width: 200px; }
+.nav-avatar { width: 28px; height: 28px; object-fit: cover; }
+.theme-toggle-btn { background-color: transparent !important; border: 1px solid #dee2e6 !important; color: #6c757d !important; transition: all 0.3s ease; }
+.theme-toggle-btn:hover { background-color: #f8f9fa !important; }
+
+.dropdown { position: relative; display: inline-block; }
+.dropdown-menu { display: none; position: absolute; right: 0; top: 100%; background-color: white; min-width: 200px; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); border-radius: 8px; z-index: 1000; padding: 0.5rem 0; border: 1px solid #eaeaea; margin-top: 10px !important; }
+
+/* MAGIA UX: EL PUENTE INVISIBLE DEFINITIVO */
+/* Soluciona el clásico error donde el usuario pierde el focus al mover el ratón 
+   del botón al menú porque hay un espacio (gap) entre ellos. Creamos un pseudo-elemento 
+   invisible que conecta ambas cajas para mantener el hover activo. */
+.dropdown::after { 
+    content: ''; 
+    position: absolute; 
+    top: 100%; 
+    left: 0; 
+    width: 100%; 
+    height: 15px; 
+    background: transparent; 
+    z-index: 999;
+}
+
+.dropdown:hover .dropdown-menu { display: block; animation: fadeInDropdown 0.2s ease; }
+@keyframes fadeInDropdown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.dropdown-item { display: block; padding: 10px 15px; color: #333; text-decoration: none; transition: background 0.2s; }
+.dropdown-item:hover { background-color: var(--iori-light); color: var(--iori-primary); font-weight: 600; }
+.dropdown-divider { height: 1px; background-color: #eaeaea; margin: 5px 0; }
+
+.footer-iori { background-color: #0a0a0a; background-image: url('/assets/img/banner/banner-collage.png'); background-blend-mode: overlay; background-size: cover; background-position: center; border-top: 4px solid var(--iori-primary); color: white; }
+.footer-brand { font-size: 1.5rem; font-weight: 700; text-decoration: none; color: var(--iori-primary) !important; }
+.footer-brand-logo { height: 55px; width: auto; }
+.footer-micro-text { font-size: 0.7rem; }
+.footer-iori .social-links a { color: white; font-size: 1.2rem; opacity: 0.6; transition: all 0.3s ease; }
+.footer-iori .social-links a:hover { color: var(--iori-primary); opacity: 1; transform: translateY(-3px); }
+
+/* =========================================================================================
+   4. VISTAS PÚBLICAS: INDEX Y CATÁLOGO
+========================================================================================= */
+.hero-item { height: 450px; background-color: #111; }
+/* Efecto de profundidad (Depth of Field) para la imagen hero */
+.hero-bg-blur { position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(8px) brightness(0.3); background-size: cover; background-position: center; }
+.hero-img-destacada { height: 350px; width: 240px; object-fit: cover; border: 4px solid rgba(255,255,255,0.15); transform: rotate(-2deg); }
+
+/* Customización del Scrollbar nativo del navegador para el carrusel horizontal */
+.scroll-novedades { scrollbar-width: thin; scrollbar-color: var(--iori-primary) #f1f1f1; }
+.scroll-novedades::-webkit-scrollbar { height: 6px; }
+.scroll-novedades::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+.scroll-novedades::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+.scroll-novedades::-webkit-scrollbar-thumb:hover { background: var(--iori-primary); }
+
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2rem; }
+.card-obra { transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease; border-radius: 8px; background: #fff; border: 1px solid #eaeaea; }
+.card-obra:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12) !important; border-color: var(--iori-primary); }
+.card-obra:hover .zoom-img { transform: scale(1.05); }
+/* Mantenimiento del aspect ratio 2:3 estricto para portadas Manga/Manhwa usando padding-top */
+.portada-wrapper { position: relative; overflow: hidden; width: 100%; padding-top: 140%; }
+
+/* =========================================================================================
+   5. COMPONENTE: DETALLE DE OBRA
+========================================================================================= */
+.detalle-main { padding-bottom: 4rem; }
+.detalle-loading { text-align: center; padding: 2rem; }
+.detalle-star-small { font-size: 0.85rem; }
+.detalle-badge-tipo { position: absolute; width: 100%; text-align: center; font-weight: bold; color: white; padding: 0.25rem 0; z-index: 2; top: 0; left: 0; font-size: 0.9rem; letter-spacing: 1px; border-top-left-radius: 0.35rem; border-top-right-radius: 0.35rem; }
+.detalle-badge-demo { position: absolute; width: 100%; text-align: center; font-weight: bold; color: white; padding: 0.25rem 0; z-index: 2; bottom: 0; left: 0; font-size: 0.85rem; letter-spacing: 1px; border-bottom-left-radius: 0.35rem; border-bottom-right-radius: 0.35rem; }
+.detalle-portada-container { max-width: 320px; }
+.detalle-portada-img { object-fit: cover; aspect-ratio: 2/3; }
+.detalle-divider { width: 1px; background-color: #ddd; }
+
+/* Clamp Text: Sistema de colapso para sinopsis largas con gradiente difuminado */
+.sinopsis-container { position: relative; }
+.sinopsis-texto { line-height: 1.7; font-size: 1.1rem; color: #495057; max-height: 120px; overflow: hidden; transition: max-height 0.3s ease; }
+.sinopsis-texto.expandida { max-height: 1500px; }
+.sinopsis-difuminado { position: absolute; bottom: 0; left: 0; width: 100%; height: 50px; background: linear-gradient(transparent, #ffffff); transition: opacity 0.3s ease; pointer-events: none; }
+.sinopsis-texto.expandida + .sinopsis-difuminado { opacity: 0; }
+.btn-leer-mas { background: none; border: none; color: var(--iori-primary); font-weight: bold; padding: 0; margin-top: 5px; cursor: pointer; }
+.btn-leer-mas:hover { color: var(--iori-hover); text-decoration: underline; }
+
+.review-card { background-color: #fff; border-top: 3px solid var(--iori-primary) !important; }
+.review-avatar { object-fit: cover; }
+.review-text { white-space: pre-wrap; font-size: 1rem; line-height: 1.6; }
+
+/* Control de Estrellas (Sistema de Rating) usando dirección RTL para rellenar desde la izquierda al hacer hover */
+.clasificacion { direction: rtl; unicode-bidi: bidi-override; display: inline-block; }
+.clasificacion input[type="radio"] { display: none; }
+.clasificacion label { color: #ddd; font-size: 1.8rem; padding: 0 2px; cursor: pointer; transition: color 0.2s; }
+.clasificacion label:hover, .clasificacion label:hover ~ label, .clasificacion input[type="radio"]:checked ~ label { color: #ffc107; }
+
+/* =========================================================================================
+   6. LECTOR INMERSIVO (VISOR DE CAPÍTULOS)
+========================================================================================= */
+body.visor-body { background-color: #0f0f11; color: #fff; margin: 0; padding: 0; }
+.visor-barra { background: rgba(15, 15, 17, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 1rem 1.5rem; position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; z-index: 1000; border-bottom: 1px solid rgba(255, 255, 255, 0.05); transition: transform 0.3s ease; }
+.btn-volver { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; text-decoration: none; padding: 0.4rem 1rem; border-radius: 50px; transition: all 0.2s ease; }
+.btn-volver:hover { background: rgba(255, 255, 255, 0.25); color: #fff; }
+.titulo-visor { font-weight: 700; font-size: 1rem; color: #fff; text-align: center; flex: 1; padding: 0 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.visor-nav-container { display: flex; gap: 0.5rem; }
+.btn-mini-nav { width: 38px; height: 38px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; line-height: 1; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3); color: white; transition: all 0.2s; }
+.btn-mini-nav:hover { background: var(--iori-primary); border-color: var(--iori-primary); color: white; }
+.btn-mini-nav.active { background-color: var(--iori-primary); border-color: var(--iori-primary); }
+.btn-mini-nav.disabled { opacity: 0.2; cursor: not-allowed; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3); }
+
+/* Anulación de márgenes/paddings nativos para lograr continuidad visual entre imágenes de lectura */
+.visor-contenido { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; padding: 2rem 0; gap: 0 !important; line-height: 0 !important; font-size: 0 !important; }
+.pagina-manga { max-width: 100%; display: block; width: 100%; height: auto; margin: 0 !important; padding: 0 !important; border: none !important; }
+.visor-empty-state { padding: 10rem 2rem; text-align: center; color: #555; }
+
+.navegacion-capitulos { width: 100%; max-width: 900px; margin: 0 auto; padding: 3rem 1rem; display: flex; justify-content: space-between; gap: 1.5rem; }
+.btn-nav-cap { flex: 1; padding: 1.2rem; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 800; font-size: 1.1rem; letter-spacing: 1px; text-transform: uppercase; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 0.8rem; border: none; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+.btn-anterior { background-color: #2a2a2d; color: #ddd; }
+.btn-anterior:hover { background-color: #3a3a3d; color: white; }
+.btn-siguiente { background-color: var(--iori-primary); color: white; }
+.btn-siguiente:hover { background-color: var(--iori-hover); color: white; }
+.btn-nav-cap.btn-disabled { background-color: #1a1a1c; color: #777; cursor: not-allowed; box-shadow: none; }
+
+.zona-comentarios { max-width: 900px; margin: 0 auto; padding: 4rem 1rem 5rem 1rem; color: #eee; border-top: 1px solid #333; }
+.visor-alert-danger { background-color: #2a1111; border: 1px solid #ff4444; color: #ff8888; border-radius: 8px; }
+.visor-alert-login { background: #1a1e24; border: 1px solid #2c3542; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.visor-alert-login p { color: #ddd; font-size: 1.05rem; }
+.visor-btn-login { background-color: var(--iori-primary); border:none; transition: all 0.3s; }
+.caja-comentario { background: #18181b; border: 1px solid #3a3a3d; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; gap: 1.2rem; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); }
+.avatar-comentario { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 2px solid #444; }
+.texto-comentario { color: #eee; margin-top: 0.8rem; line-height: 1.6; font-size: 0.95rem; }
+.form-comentario textarea { background: #18181b; border: 1px solid #444; color: white; resize: vertical; border-radius: 8px; padding: 1rem; }
+.form-comentario textarea:focus { background: #222; border-color: var(--iori-primary); outline: none; box-shadow: 0 0 0 0.25rem rgba(10, 134, 136, 0.25); }
+
+/* =========================================================================================
+   7. COMPONENTE COMUNIDAD (FORO Y TEMAS)
+========================================================================================= */
+.foro-main-container { min-height: 80vh; background-color: #f4f6f8; }
+.bg-purple { background-color: #6f42c1; }
+
+.tema-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.tema-card:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important; }
+/* Pseudo-elemento para el Accent indicator en el lateral del card del foro */
+.tema-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background-color: var(--iori-primary); opacity: 0; transition: opacity 0.2s ease; }
+.tema-card:hover::before { opacity: 1; }
+
+.foro-cta-icon { width: 65px; height: 65px; }
+.foro-header-icon { width: 45px; height: 45px; }
+.foro-post-content-preview { max-width: 95%; }
+
+.foro-thread-header-card { border-top: 4px solid var(--iori-primary) !important; }
+.foro-avatar-md { width: 55px; height: 55px; object-fit: cover; }
+.foro-post-content { white-space: pre-wrap; color: #444; line-height: 1.7; word-break: break-word; }
+
+/* =========================================================================================
+   8. PANEL DE PERFIL DE USUARIO Y BIBLIOTECA
+========================================================================================= */
+.perfil-main-container, .biblioteca-main-container { background-color: #fbfbfb; min-height: 80vh; }
+.perfil-avatar-img { width: 120px; height: 120px; object-fit: cover; background-color: #f8f9fa; }
+/* Utilidades de truncamiento multi-línea (Line Clamping) nativas de Webkit */
+.perfil-text-clamp-2 { font-size: 0.95rem; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.perfil-text-clamp-3 { font-size: 0.95rem; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+.perfil-danger-card { background-color: #fffafb; }
+.perfil-danger-header { background-color: #dc3545; color: white; }
+
+.nav-pills .nav-link { color: #6c757d; background-color: transparent; transition: all 0.2s ease; }
+.nav-pills .nav-link.active { background-color: var(--iori-primary); color: white !important; box-shadow: 0 4px 10px rgba(10, 134, 136, 0.3); }
+
+.card-biblioteca { transition: transform 0.2s ease, box-shadow 0.2s ease; border-radius: 12px; background-color: #fff; }
+.card-biblioteca:hover { transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08) !important; }
+.card-biblioteca:hover .zoom-img { transform: scale(1.05); }
+
+/* =========================================================================================
+   9. INTERFAZ DE AUTENTICACIÓN (LOGIN/REGISTRO)
+========================================================================================= */
+.login-body-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #f4f6f8; }
+.login-card { max-width: 420px; width: 100%; border-radius: 16px; background-color: #ffffff; text-align: center; }
+.login-input-style { border-radius: 10px; padding: 12px 15px; border: 1px solid #e2e8f0; }
+.login-input-style:focus { border-color: var(--iori-primary); box-shadow: 0 0 0 0.25rem rgba(10, 134, 136, 0.25); }
+
+/* =========================================================================================
+   10. PANEL DE ADMINISTRACIÓN Y BACKOFFICE
+========================================================================================= */
+.admin-main-container { min-height: 80vh; background-color: #f4f6f8; }
+.admin-table-hover tbody tr:hover { background-color: #f8f9fa; transition: background-color 0.2s ease; }
+.preview-grid-container { max-height: 300px; overflow-y: auto; padding: 0.5rem; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
+.preview-img-wrapper { position: relative; width: 80px; height: 120px; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); border: 1px solid #ccc; }
+.admin-cover-img { width: 65px; height: 95px; object-fit: cover; }
+.admin-cap-cover { width: 120px; height: 180px; object-fit: cover; }
+.avatar-admin-list { width: 45px; height: 45px; object-fit: cover; }
+.admin-mobile-cover { width: 85px; height: 125px; object-fit: cover; }
+.admin-mobile-views { font-size: 0.85rem; padding: 0.3rem 0.6rem !important; }
+/* Arreglar los hovers nativos sucios de Bootstrap */
+.btn-info:hover { background-color: #0aa2c0 !important; border-color: #0aa2c0 !important; color: #fff !important; }
+.btn-warning:hover { background-color: #e0a800 !important; border-color: #e0a800 !important; color: #fff !important; }
+.btn-danger:hover { background-color: #c82333 !important; border-color: #bd2130 !important; color: #fff !important; }
+
+/* =========================================================================================
+   11. SISTEMA NATIVO DE MODO OSCURO (DATA-BS-THEME OVERRIDES)
+========================================================================================= */
+/* Inversión global de la paleta de colores interceptando el atributo [data-bs-theme="dark"] 
+   inyectado en el root (HTML) por Javascript */
+[data-bs-theme="dark"] body, [data-bs-theme="dark"] .admin-main-container, [data-bs-theme="dark"] .foro-main-container, [data-bs-theme="dark"] .perfil-main-container, [data-bs-theme="dark"] .biblioteca-main-container, [data-bs-theme="dark"] .login-body-wrapper { background-color: #121212 !important; color: #e0e0e0 !important; }
+[data-bs-theme="dark"] header { background-color: #1a1a1a !important; border-bottom-color: #2d2d2d !important; }
+[data-bs-theme="dark"] .bg-white, [data-bs-theme="dark"] .bg-light, [data-bs-theme="dark"] .card, [data-bs-theme="dark"] .card-obra, [data-bs-theme="dark"] .login-card, [data-bs-theme="dark"] .tema-card, [data-bs-theme="dark"] .review-card, [data-bs-theme="dark"] .card-biblioteca, [data-bs-theme="dark"] .dropdown-menu { background-color: #1e1e1e !important; border-color: #2d2d2d !important; color: #e0e0e0 !important; }
+
+[data-bs-theme="dark"] .form-control, [data-bs-theme="dark"] .form-select, [data-bs-theme="dark"] .input-group-text, [data-bs-theme="dark"] .search-btn-header { background-color: #2a2a2a !important; border-color: #444 !important; color: #fff !important; }
+[data-bs-theme="dark"] .theme-toggle-btn { border-color: #444 !important; color: #fbbf24 !important; }
+
+/* 1. Obligamos a todos los encabezados y textos oscuros a ser blancos */
+[data-bs-theme="dark"] h1, 
+[data-bs-theme="dark"] h2, 
+[data-bs-theme="dark"] h3, 
+[data-bs-theme="dark"] h4, 
+[data-bs-theme="dark"] h5, 
+[data-bs-theme="dark"] h6,
+[data-bs-theme="dark"] .text-dark {
+    color: #f8f9fa !important;
+}
+
+/* 2. Arreglamos los enlaces dentro de las tarjetas EXCLUYENDO los botones (.btn) */
+[data-bs-theme="dark"] .card a:not(.btn),
+[data-bs-theme="dark"] .list-group-item a:not(.btn) {
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .card a:not(.btn):hover,
+[data-bs-theme="dark"] .list-group-item a:not(.btn):hover {
     color: var(--iori-primary) !important;
 }
-
-.bg-iori {
-    background-color: var(--iori-primary) !important;
+/* 3. Aclaramos los textos grises (muted/secondary) para que resalten sobre fondo negro */
+[data-bs-theme="dark"] .text-muted, 
+[data-bs-theme="dark"] .text-secondary {
+    color: #adb5bd !important; 
 }
 
-.btn-iori {
-    background-color: var(--iori-primary);
-    color: white;
-    border: none;
-    transition: all 0.3s ease;
+/* 4. Arreglamos el color general de la barra lateral (list-group) */
+[data-bs-theme="dark"] .list-group-item {
+    color: #e0e0e0;
 }
 
-.btn-iori:hover {
-    background-color: var(--iori-hover);
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(10, 134, 136, 0.3);
+/* Arreglo del difuminado de la sinopsis en Modo Oscuro */
+[data-bs-theme="dark"] .sinopsis-difuminado { 
+    background: linear-gradient(transparent, #121212) !important; 
 }
 
-/* =========================================
-   ESTRUCTURA PRINCIPAL
-========================================= */
-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 5%;
-    border-bottom: 1px solid #eaeaea;
-    background: white;
+/* 5. Arreglo definitivo para las tablas del Panel Admin en Modo Oscuro */
+[data-bs-theme="dark"] .admin-table-hover thead,
+[data-bs-theme="dark"] .admin-table-hover thead th {
+    background-color: #282828 !important; /* Gris oscuro elegante, resalta sobre el fondo #1e1e1e */
+    color: #adb5bd !important; /* Gris claro para el texto */
+    border-bottom: 2px solid #444 !important;
 }
 
-.logo {
-    font-size: 1.25rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    text-decoration: none;
-    color: inherit;
-    cursor: pointer;
+/* Highlight sutil al pasar el ratón por encima de una fila en modo oscuro */
+[data-bs-theme="dark"] .admin-table-hover tbody tr:hover {
+    background-color: #2a2a2a !important; 
+    color: #fff !important;
 }
 
-nav ul {
-    display: flex;
-    list-style: none;
-    gap: 2rem;
+/* Evitamos que los bordes de la tabla sean blancos */
+[data-bs-theme="dark"] .admin-table-hover td {
+    border-color: #333 !important;
 }
 
-nav a {
-    text-decoration: none;
-    color: var(--primary-color);
-    font-weight: 600;
-    font-size: 0.95rem;
-    cursor: pointer;
+/* 6. Forzar que el hover corporativo gane a las clases 'text-muted' en la oscuridad */
+[data-bs-theme="dark"] .hover-iori:hover,
+[data-bs-theme="dark"] .hover-iori:hover * {
+    color: var(--iori-primary) !important;
+    text-decoration: none !important;
 }
 
-main {
-    padding: 2rem 5%;
-    max-width: 1400px;
-    margin: 0 auto;
-    flex: 1;
-    width: 100%;
-}
+/* =========================================================================================
+   12. RESPONSIVE DESIGN: MEDIA QUERIES (MOBILE-FIRST PATCHES)
+========================================================================================= */
 
-/* =========================================
-   COMPONENTES INDEX (CARRUSEL Y NOVEDADES)
-========================================= */
-.hero-item {
-    height: 450px;
-    background-color: #111;
-}
-
-.hero-bg-blur {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    filter: blur(8px) brightness(0.3);
-    background-size: cover;
-    background-position: center;
-}
-
-.scroll-novedades {
-    scrollbar-width: thin;
-    scrollbar-color: var(--iori-primary) #f1f1f1;
-}
-
-.scroll-novedades::-webkit-scrollbar {
-    height: 6px;
-}
-
-.scroll-novedades::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.scroll-novedades::-webkit-scrollbar-thumb {
-    background: #ccc;
-    border-radius: 4px;
-}
-
-.scroll-novedades::-webkit-scrollbar-thumb:hover {
-    background: var(--iori-primary);
-}
-
-/* =========================================
-   GRID CATÁLOGO Y TARJETAS
-========================================= */
-.catalog-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 2rem;
-}
-
-.card-obra {
-    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
-    border-radius: 8px;
-    background: #fff;
-    border: 1px solid #eaeaea;
-    /* Aseguramos que la tarjeta en sí no oculte el overflow, lo hace el div interior */
-}
-
-.card-obra:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12) !important;
-    border-color: var(--iori-primary);
-}
-
-.zoom-img {
-    transition: transform 0.5s ease;
-}
-
-.card-obra:hover .zoom-img {
-    transform: scale(1.05);
-}
-
-/* =========================================
-   PÁGINA DETALLE DE OBRA
-========================================= */
-.detalle-header {
-    display: flex;
-    gap: 2.5rem;
-    margin-bottom: 3rem;
-    flex-wrap: wrap;
-}
-
-.detalle-img {
-    width: 280px;
-    border-radius: 12px;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
-}
-
-.detalle-info {
-    flex: 1;
-}
-
-.detalle-titulo {
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin-bottom: 0.5rem;
-    line-height: 1.2;
-}
-
-.detalle-meta {
-    color: var(--text-muted);
-    margin-bottom: 1.5rem;
-    font-size: 1.1rem;
-}
-
-.detalle-sinopsis {
-    line-height: 1.7;
-    color: #444;
-    margin-bottom: 2rem;
-    max-width: 800px;
-}
-
-.contenedor-capitulos {
-    border: 1px solid #eaeaea;
-    border-radius: 8px;
-    overflow: hidden;
-    max-height: 500px;
-    overflow-y: auto;
-}
-
-.capitulo-item {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #eaeaea;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
-    transition: background 0.2s;
-}
-
-.capitulo-item:hover {
-    background-color: var(--iori-light);
-}
-
-/* =========================================
-   LOGIN Y FORMULARIOS
-========================================= */
-.login-container {
-    max-width: 400px;
-    margin: 5rem auto;
-    padding: 2rem;
-    border: 1px solid #eaeaea;
-    border-radius: 12px;
-    text-align: center;
-}
-
-.login-input {
-    width: 100%;
-    padding: 0.8rem;
-    margin-bottom: 1rem;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-}
-
-/* =========================================
-   MENÚ DESPLEGABLE (DROPDOWN)
-========================================= */
-.dropdown {
-    position: relative;
-    display: inline-block;
-}
-
-.dropdown-menu {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 100%;
-    background-color: white;
-    min-width: 200px;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
-    z-index: 1000;
-    padding: 0.5rem 0;
-    text-align: left;
-    border: 1px solid #eaeaea;
-}
-
-.dropdown:hover .dropdown-menu {
-    display: block;
-}
-
-.dropdown-item {
-    display: block;
-    padding: 10px 15px;
-    color: #333;
-    text-decoration: none;
-    transition: background 0.2s;
-}
-
-.dropdown-item:hover {
-    background-color: var(--iori-light);
-    color: var(--iori-primary);
-    font-weight: 600;
-}
-
-.dropdown-divider {
-    height: 1px;
-    background-color: #eaeaea;
-    margin: 5px 0;
-}
-
-/* =========================================
-   VISOR DE LECTURA (MANGA/MANHWA)
-========================================= */
-.visor-body {
-    background-color: #0d0d0d;
-    color: #fff;
-    overflow-x: hidden;
-}
-
-.visor-barra {
-    background: #000;
-    padding: 1rem;
-    position: sticky;
-    top: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    z-index: 200;
-    border-bottom: 1px solid #222;
-}
-
-.btn-volver {
-    background: none;
-    border: none;
-    font-size: 1rem;
-    color: #aaa;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.btn-volver:hover {
-    color: white;
-}
-
-.visor-contenido {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-bottom: 5rem;
-    gap: 0 !important;
-    line-height: 0 !important;
-    font-size: 0 !important;
-}
-
+/* ARREGLO VISOR: Soluciona el bug de renderizado de Webkit/Blink que deja 1px blanco entre las imágenes de un manga. */
 .pagina-manga {
-    max-width: 100%;
-    display: block;
-    width: 100%;
-    height: auto;
-    margin: 0 !important;
-    padding: 0 !important;
+    vertical-align: top;
     border: none !important;
+    box-shadow: none !important; 
 }
 
-/* NAVEGACIÓN DE CAPÍTULOS DENTRO DEL VISOR */
-.navegacion-capitulos {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    background-color: #0d0d0d;
+/* Evita que contenedores flexibles rompan el layout de la pantalla en dispositivos móviles
+   por culpa de palabras o enlaces extremadamente largos (Overflow Protection) */
+.list-group-item, .card-body { min-width: 0; }
+.list-group-item * { overflow-wrap: break-word; word-wrap: break-word; }
+
+/* Ajustes Específicos para Tablets y Móviles (Menu Hamburger) */
+@media (max-width: 991px) {
+    /* Transformación del menú colapsado en UI flotante (Estilo App) */
+    .navbar-collapse {
+        background-color: #fff;
+        padding: 1.2rem;
+        border-radius: 12px;
+        margin-top: 15px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        border: 1px solid #eaeaea;
+    }
+    [data-bs-theme="dark"] .navbar-collapse { background-color: #1e1e1e !important; border-color: #333 !important; }
+    
+    .navbar-collapse .dropdown-toggle { width: 100% !important; justify-content: flex-start !important; margin-top: 0.5rem; }
+    .navbar-collapse .dropdown-menu { position: static !important; float: none; box-shadow: none !important; border: none !important; background-color: transparent !important; }
 }
 
-.btn-nav-cap {
-    flex: 1;
-    padding: 15px;
-    border-radius: 8px;
-    text-align: center;
-    text-decoration: none;
-    font-weight: bold;
-    color: white;
-    transition: background 0.2s;
-    border: 1px solid #333;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
+/* Ajustes Específicos para Dispositivos Móviles Estándar (< 768px) */
+@media (max-width: 767px) {
+    main { padding: 1.5rem 15px; } 
+    
+    /* Hero Banner: Adaptación del layout a columna vertical y anulación de rotación estética */
+    .hero-item { height: auto; min-height: 500px; padding: 3rem 0 2rem 0; }
+    .hero-item .d-none.d-md-block { display: block !important; margin-bottom: 1.5rem; }
+    .hero-img-destacada { height: 180px; width: 125px; margin: 0 auto; transform: rotate(0deg); }
+    .hero-item h1.display-4 { font-size: 1.8rem !important; text-align: center; }
+    .hero-item .col-md-8 { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 0 !important; }
+    
+    /* Panel Admin: Scroll horizontal táctil para Data-Tables largas */
+    .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+    
+    /* Foro Mobile: Degradación elegante del Line Clamping */
+    .foro-main-container .text-truncate { white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Visor Mobile: Refuerzo agresivo contra el hueco de 1px entre viñetas */
+    .pagina-manga { margin-bottom: -1px !important; }
+    .pagina-manga:last-child { margin-bottom: 0 !important; }
 }
 
-.btn-anterior {
-    background-color: #262626;
-}
-
-.btn-anterior:hover {
-    background-color: #404040;
-    color: white;
-}
-
-/* Aquí cambiamos el azul por defecto por tu color de IoriScans */
-.btn-siguiente {
-    background-color: var(--iori-primary);
-    border-color: var(--iori-primary);
-}
-
-.btn-siguiente:hover {
-    background-color: var(--iori-hover);
-    color: white;
-}
-
-.btn-disabled {
-    background-color: #1a1a1a;
-    color: #666;
-    cursor: not-allowed;
-    border-color: #333;
-}
-
-.btn-mini-nav {
-    width: 36px;
-    height: 36px;
-    padding: 0 !important;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    line-height: 1;
-}
-
-/* =========================================
-   BADGES (ETIQUETAS) Y BOTONES OUTLINE
-========================================= */
-.badge-iori {
-    background-color: var(--iori-light);
-    color: var(--iori-primary);
-    border: 1px solid rgba(10, 134, 136, 0.25);
-    font-weight: 600;
-    padding: 0.35rem 0.65rem;
-}
-
-.btn-outline-iori {
-    color: var(--iori-primary);
-    border: 2px solid var(--iori-primary);
-    background-color: transparent;
-    transition: all 0.3s ease;
-}
-
-.btn-outline-iori:hover,
-.btn-outline-iori:focus,
-.btn-outline-iori[aria-expanded="true"] {
-    background-color: var(--iori-primary);
-    color: white;
-    box-shadow: 0 4px 8px rgba(10, 134, 136, 0.2);
-}
-
-/* =========================================
-   FOOTER PERSONALIZADO - IORISCANS
-========================================= */
-.footer-iori {
-    background-color: #111;
-    /* Negro profundo */
-    border-top: 3px solid var(--iori-primary);
-    /* Línea de marca arriba */
-    color: white;
-}
-
-.footer-brand {
-    font-size: 1.5rem;
-    font-weight: 700;
-    text-decoration: none;
-    color: var(--iori-primary) !important;
-}
-
-.footer-iori .social-links a {
-    color: white;
-    font-size: 1.2rem;
-    opacity: 0.6;
-    transition: all 0.3s ease;
-}
-
-.footer-iori .social-links a:hover {
-    color: var(--iori-primary);
-    opacity: 1;
-    transform: translateY(-3px);
-}
-
-.hover-white:hover {
-    color: white !important;
-    padding-left: 5px;
-    /* Pequeño efecto de desplazamiento */
-    transition: all 0.2s ease;
-}
-
-/* Para asegurar que el footer siempre esté abajo */
-body {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
+/* Ajustes Específicos para Móviles Pequeños (Smartphones estrechos) */
+@media (max-width: 575px) {
+    /* Forzamos el grid a 2 columnas fijas ignorando las reglas genéricas de Bootstrap */
+    .row-cols-2 > * { flex: 0 0 auto !important; width: 50% !important; }
+    
+    .card-obra h6.card-title { font-size: 0.85rem !important; }
+    .card-obra .badge { font-size: 0.55rem !important; padding: 0.2rem 0.3rem; }
 }

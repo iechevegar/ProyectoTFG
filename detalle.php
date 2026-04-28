@@ -207,6 +207,7 @@ include 'includes/header.php';
                         <div class="card mb-4 border shadow-sm rounded-4 bg-body">
                             <div class="card-body p-4">
                                 <form method="POST" action="">
+                                    <?php echo csrf_field(); ?>
                                     <label class="form-label fw-bold mb-0">Deja tu valoración:</label>
                                     <div class="d-block mb-1">
                                         <div class="clasificacion">

@@ -5,23 +5,16 @@ require 'includes/db.php';
 // =========================================================================================
 // 1. SISTEMA DE RESTRICCIONES (ACCOUNT STATE CHECKS)
 // =========================================================================================
-// Antes de renderizar la UI, verificamos si el usuario tiene un "Soft-Ban" activo.
-// Esta variable booleana ($estaSuspendido) nos permitirá mutar la interfaz condicionalmente,
-// ocultando los botones de "Crear Tema" y mostrando en su lugar la fecha de finalización del castigo.
+// Verificamos si el usuario tiene un Soft-Ban activo antes de renderizar la UI.
+// $estaSuspendido muta la interfaz: oculta "Crear Tema" y muestra la fecha de fin del castigo.
 $estaSuspendido = false;
 $fechaDesbloqueoStr = '';
 
 if (isset($_SESSION['usuario'])) {
-    $nombreUser = $_SESSION['usuario'];
-    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
-    if ($resUser && $resUser->num_rows > 0) {
-        $userData = $resUser->fetch_assoc();
-
-        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
-            $estaSuspendido = true;
-            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
-        }
-    }
+    // get_estado_usuario() usa prepared statement internamente (Anti-SQLi).
+    $estadoUser = get_estado_usuario($conn);
+    $estaSuspendido     = $estadoUser['suspendido'];
+    $fechaDesbloqueoStr = $estadoUser['hasta'] ?? '';
 }
 
 
@@ -45,68 +38,83 @@ function tiempo_transcurrido_foro($fecha)
 
 
 // =========================================================================================
-// 3. QUERY BUILDER: FILTRADO DINÁMICO Y PAGINACIÓN
+// 3. QUERY BUILDER: FILTRADO DINÁMICO Y PAGINACIÓN (ANTI-SQLi)
 // =========================================================================================
-// Recolectamos los parámetros GET sanitizándolos inmediatamente para evitar inyecciones SQL.
-$busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
-$categoria = isset($_GET['cat']) ? $_GET['cat'] : 'todas';
-$orden = isset($_GET['orden']) ? $_GET['orden'] : 'actividad';
+// Prepared statements con parámetros enlazados en lugar de real_escape_string.
+$busqueda  = isset($_GET['q'])    ? trim($_GET['q'])    : '';
+$categoria = isset($_GET['cat'])  ? trim($_GET['cat'])  : 'todas';
+$orden     = isset($_GET['orden'])? trim($_GET['orden']): 'actividad';
 
 $resultados_por_pagina = 8;
 $pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
 $offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
-// Construcción modular de la cláusula WHERE.
-$condicion_sql = "WHERE 1=1";
+$where_foro = "WHERE 1=1";
+$tipos_f    = "";
+$params_f   = [];
+
 if (!empty($busqueda)) {
-    // Búsqueda Full-Text básica en título y cuerpo del mensaje
-    $condicion_sql .= " AND (t.titulo LIKE '%$busqueda%' OR t.contenido LIKE '%$busqueda%')";
+    // Búsqueda en título y cuerpo del mensaje.
+    $like_f = "%$busqueda%";
+    $where_foro .= " AND (t.titulo LIKE ? OR t.contenido LIKE ?)";
+    $tipos_f .= "ss";
+    $params_f[] = &$like_f; $params_f[] = &$like_f;
 }
-if ($categoria !== 'todas') {
-    $catLimpia = $conn->real_escape_string($categoria);
-    $condicion_sql .= " AND t.categoria = '$catLimpia'";
+// Whitelist de categorías válidas para evitar inyección por este parámetro.
+$cats_validas = ['General', 'Teorías', 'Noticias', 'Recomendaciones', 'Off-Topic'];
+if ($categoria !== 'todas' && in_array($categoria, $cats_validas)) {
+    $where_foro .= " AND t.categoria = ?";
+    $tipos_f .= "s";
+    $params_f[] = &$categoria;
 }
 
-// Calculamos el volumen total del Data-Set aplicando los filtros para poder construir el Paginador visual.
-$sqlTotal = "SELECT COUNT(t.id) as total FROM foro_temas t " . $condicion_sql;
-$resTotal = $conn->query($sqlTotal);
-$total_registros = $resTotal->fetch_assoc()['total'];
-$total_paginas = ceil($total_registros / $resultados_por_pagina);
+// Consulta de conteo para el paginador (mismos filtros, sin LIMIT).
+$stmtTotalF = $conn->prepare("SELECT COUNT(t.id) as total FROM foro_temas t $where_foro");
+if (!empty($tipos_f)) {
+    $ba_f = array_merge([$tipos_f], $params_f);
+    call_user_func_array([$stmtTotalF, 'bind_param'], $ba_f);
+}
+$stmtTotalF->execute();
+$total_registros = $stmtTotalF->get_result()->fetch_assoc()['total'];
+$total_paginas   = ceil($total_registros / $resultados_por_pagina);
 
 
 // =========================================================================================
 // 4. LA MACRO-CONSULTA DEL FEED (N+1 PROBLEM AVOIDANCE)
 // =========================================================================================
-// NOTA ARQUITECTÓNICA CLAVE: En lugar de iterar con un foreach en PHP y lanzar una consulta 
-// a la base de datos por cada tema para contar sus respuestas (lo que causaría el Problema N+1),
-// utilizamos "Subconsultas Correlacionadas" (Correlated Subqueries). 
-// Esto nos permite traernos toda la agregación (conteo, fecha de última respuesta y autor de la misma) 
-// en una única e hiper-optimizada transacción de red.
-$sql = "SELECT t.*, u.nombre, u.foto, u.rol,
+// Subconsultas correlacionadas para traer conteo, última actividad y último usuario
+// en una sola transacción en lugar de N consultas por tema (problema N+1).
+$sql_foro = "SELECT t.*, u.nombre, u.foto, u.rol,
         (SELECT COUNT(*) FROM foro_respuestas WHERE tema_id = t.id) as num_respuestas,
         (SELECT fecha FROM foro_respuestas WHERE tema_id = t.id ORDER BY fecha DESC LIMIT 1) as ultima_actividad_fecha,
         (SELECT u2.nombre FROM foro_respuestas r JOIN usuarios u2 ON r.usuario_id = u2.id WHERE r.tema_id = t.id ORDER BY r.fecha DESC LIMIT 1) as ultimo_usuario
         FROM foro_temas t
         JOIN usuarios u ON t.usuario_id = u.id
-        $condicion_sql";
+        $where_foro";
 
 // --- ALGORITMO DE BUMPING Y ORDENAMIENTO ---
 if ($orden === 'populares') {
-    $sql .= " ORDER BY num_respuestas DESC, t.fecha DESC";
+    $sql_foro .= " ORDER BY num_respuestas DESC, t.fecha DESC";
 } elseif ($orden === 'antiguos') {
-    $sql .= " ORDER BY t.fecha ASC";
+    $sql_foro .= " ORDER BY t.fecha ASC";
 } elseif ($orden === 'recientes') {
-    $sql .= " ORDER BY t.fecha DESC";
+    $sql_foro .= " ORDER BY t.fecha DESC";
 } else {
-    // EL MOTOR DE BUMPING: Usamos la función COALESCE de SQL. 
-    // Comprueba la fecha de la última respuesta; si es NULL (nadie ha respondido aún), 
-    // utiliza la fecha de creación del tema. Esto simula el comportamiento natural de foros 
-    // clásicos donde un comentario nuevo "sube" el tema arriba del todo.
-    $sql .= " ORDER BY COALESCE(ultima_actividad_fecha, t.fecha) DESC";
+    // Motor de Bumping: COALESCE prioriza la última respuesta; si no hay (NULL), usa la creación.
+    $sql_foro .= " ORDER BY COALESCE(ultima_actividad_fecha, t.fecha) DESC";
 }
 
-$sql .= " LIMIT $resultados_por_pagina OFFSET $offset";
-$resultado = $conn->query($sql);
+$sql_foro .= " LIMIT ? OFFSET ?";
+$tipos_feed  = $tipos_f . "ii";
+$params_feed = $params_f;
+$params_feed[] = &$resultados_por_pagina;
+$params_feed[] = &$offset;
+
+$stmtFeed = $conn->prepare($sql_foro);
+$ba_feed = array_merge([$tipos_feed], $params_feed);
+call_user_func_array([$stmtFeed, 'bind_param'], $ba_feed);
+$stmtFeed->execute();
+$resultado = $stmtFeed->get_result();
 
 
 // =========================================================================================

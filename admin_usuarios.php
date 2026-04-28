@@ -224,7 +224,8 @@ if ($resultado && $resultado->num_rows > 0) {
                                         <span class="badge bg-white text-dark border border-secondary px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-user me-1 text-iori"></i> Es tu cuenta</span>
                                     <?php else: ?>
                                         <form method="POST" action="" class="d-inline d-flex justify-content-end gap-1">
-                                            <input type="hidden" name="id" value="<?php echo $user['id']; ?>">
+                                            <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
+                                            <?php echo csrf_field(); ?>
 
                                             <?php if($user['rol'] === 'lector'): ?>
                                                 <button type="submit" name="accion" value="hacer_admin" class="btn btn-sm btn-success shadow-sm rounded-3" title="Ascender a Admin" onclick="return confirm('¿Dar permisos de Administrador a este usuario?');">
@@ -319,7 +320,8 @@ if ($resultado && $resultado->num_rows > 0) {
                                 </div>
                             <?php else: ?>
                                 <form method="POST" action="" class="d-flex flex-wrap gap-2 justify-content-center">
-                                    <input type="hidden" name="id" value="<?php echo $user['id']; ?>">
+                                    <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
+                                    <?php echo csrf_field(); ?>
 
                                     <?php if($user['rol'] === 'lector'): ?>
                                         <button type="submit" name="accion" value="hacer_admin" class="btn btn-sm btn-success flex-grow-1 shadow-sm rounded-pill fw-bold" onclick="return confirm('¿Dar permisos de Administrador a este usuario?');">

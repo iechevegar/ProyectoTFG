@@ -36,25 +36,17 @@ $resultados_por_pagina = 10;
 // =========================================================================================
 // 2. MIDDLEWARE DE ESTADO Y POLÍTICAS DE COMUNIDAD (SOFT-BANS)
 // =========================================================================================
-// Evaluamos el estado de la sesión activa contra la base de datos en tiempo real.
-// Si el usuario tiene una sanción vigente (fecha_desbloqueo en el futuro), se activan
-// las restricciones de solo-lectura tanto en el backend como en la UI.
+// Comprobamos si el usuario tiene una sanción vigente usando get_estado_usuario(),
+// que usa prepared statement internamente (Anti-SQLi).
 $estaSuspendido = false;
 $fechaDesbloqueoStr = '';
 $userId = null;
 
 if (isset($_SESSION['usuario'])) {
-    $nombreUser = $_SESSION['usuario'];
-    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
-    if ($resUser && $resUser->num_rows > 0) {
-        $userData = $resUser->fetch_assoc();
-        $userId = $userData['id']; 
-        
-        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
-            $estaSuspendido = true;
-            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
-        }
-    }
+    $estadoUser = get_estado_usuario($conn);
+    $userId             = $estadoUser['id'];
+    $estaSuspendido     = $estadoUser['suspendido'];
+    $fechaDesbloqueoStr = $estadoUser['hasta'] ?? '';
 }
 
 
@@ -102,17 +94,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // --- B. HERRAMIENTAS DE MODERACIÓN (RBAC ADMIN) ---
     // Validación estricta: Solo procesamos peticiones destructivas si el rol en sesión es 'admin'.
     
-    // Acción: Purga de Tema Principal (El motor de BD limpiará las respuestas hijas por ON DELETE CASCADE)
+    // Accion: Purga de Tema Principal (ON DELETE CASCADE elimina las respuestas hijas).
     if (isset($_POST['borrar_tema']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
-        $conn->query("DELETE FROM foro_temas WHERE id = $idTema");
+        $stmtBT = $conn->prepare("DELETE FROM foro_temas WHERE id = ?");
+        $stmtBT->bind_param("i", $idTema);
+        $stmtBT->execute();
         header("Location: /foro");
         exit();
     }
 
-    // Acción: Purga de Respuesta Individual
+    // Accion: Purga de Respuesta Individual.
     if (isset($_POST['borrar_resp']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
         $idResp = intval($_POST['borrar_resp']);
-        $conn->query("DELETE FROM foro_respuestas WHERE id = $idResp");
+        $stmtBR = $conn->prepare("DELETE FROM foro_respuestas WHERE id = ?");
+        $stmtBR->bind_param("i", $idResp);
+        $stmtBR->execute();
         header("Location: /foro/$slug");
         exit();
     }
@@ -122,37 +118,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // 4. EXTRACCIÓN DE DATOS Y CONSTRUCCIÓN DE PAGINACIÓN (READ STATE)
 // =========================================================================================
 
-// Extracción de la Entidad Padre (El Tema) y metadatos de su autor
-$sqlTema = "SELECT t.*, u.nombre, u.foto, u.rol 
-            FROM foro_temas t 
-            JOIN usuarios u ON t.usuario_id = u.id 
-            WHERE t.id = $idTema";
-$resTema = $conn->query($sqlTema);
-$tema = $resTema->fetch_assoc();
+// Extraccion de la Entidad Padre (El Tema) con datos del autor.
+$sqlTema = "SELECT t.*, u.nombre, u.foto, u.rol
+            FROM foro_temas t
+            JOIN usuarios u ON t.usuario_id = u.id
+            WHERE t.id = ?";
+$stmtTema = $conn->prepare($sqlTema);
+$stmtTema->bind_param("i", $idTema);
+$stmtTema->execute();
+$tema = $stmtTema->get_result()->fetch_assoc();
 
-// Fallback preventivo por si el tema fue borrado concurrentemente por un admin mientras el usuario leía
+// Fail-Fast: si el tema fue borrado concurrentemente por un admin.
 if (!$tema) {
     echo "<div class='container py-5 text-center'><h1>Tema no encontrado o eliminado.</h1><a href='/foro' class='btn btn-iori mt-3'>Volver al Foro</a></div>";
     exit();
 }
 
-// Lógica de Paginación Vectorial
+// Paginacion de respuestas.
 $pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
 $offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
-$sqlTotalResp = "SELECT COUNT(id) as total FROM foro_respuestas WHERE tema_id = $idTema";
-$resTotalResp = $conn->query($sqlTotalResp);
-$total_registros = $resTotalResp->fetch_assoc()['total'];
+$stmtCountR = $conn->prepare("SELECT COUNT(id) as total FROM foro_respuestas WHERE tema_id = ?");
+$stmtCountR->bind_param("i", $idTema);
+$stmtCountR->execute();
+$total_registros = $stmtCountR->get_result()->fetch_assoc()['total'];
 $total_paginas = ceil($total_registros / $resultados_por_pagina);
 
-// Extracción de Entidades Hijas (Respuestas correspondientes a la página actual)
-$sqlResp = "SELECT r.*, u.nombre, u.foto, u.rol 
-            FROM foro_respuestas r 
-            JOIN usuarios u ON r.usuario_id = u.id 
-            WHERE r.tema_id = $idTema 
-            ORDER BY r.fecha ASC 
-            LIMIT $resultados_por_pagina OFFSET $offset";
-$respuestas = $conn->query($sqlResp);
+// Extraccion de respuestas correspondientes a la pagina actual.
+$stmtResp = $conn->prepare("SELECT r.*, u.nombre, u.foto, u.rol
+            FROM foro_respuestas r
+            JOIN usuarios u ON r.usuario_id = u.id
+            WHERE r.tema_id = ?
+            ORDER BY r.fecha ASC
+            LIMIT ? OFFSET ?");
+$stmtResp->bind_param("iii", $idTema, $resultados_por_pagina, $offset);
+$stmtResp->execute();
+$respuestas = $stmtResp->get_result();
 
 // Helper visual para clasificar taxonómicamente el tema en la Interfaz de Usuario
 function badgeColor($cat) {

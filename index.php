@@ -49,55 +49,77 @@ function obtenerColorDemografia($demo)
 }
 
 // =========================================================================================
-// 2. QUERY BUILDER: MOTOR DE BÚSQUEDA Y FILTRADO MULTI-CRITERIO
+// 2. QUERY BUILDER: MOTOR DE BÚSQUEDA Y FILTRADO MULTI-CRITERIO (ANTI-SQLi)
 // =========================================================================================
-// Capturamos y sanitizamos agresivamente los parámetros GET entrantes (Anti-SQLi).
-$busqueda = isset($_GET['q']) ? $conn->real_escape_string($_GET['q']) : '';
-$filtro_genero = isset($_GET['genero']) ? $conn->real_escape_string($_GET['genero']) : '';
-$filtro_autor = isset($_GET['autor']) ? $conn->real_escape_string($_GET['autor']) : '';
+// Usamos prepared statements con parámetros enlazados en lugar de real_escape_string,
+// que es susceptible a fallos de codificación y no es suficiente como única defensa.
+$busqueda     = isset($_GET['q'])      ? trim($_GET['q'])      : '';
+$filtro_genero= isset($_GET['genero']) ? trim($_GET['genero']) : '';
+$filtro_autor = isset($_GET['autor'])  ? trim($_GET['autor'])  : '';
 
-$resultados_por_pagina = 12; 
+$resultados_por_pagina = 12;
 $pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
 $offset = ($pagina_actual - 1) * $resultados_por_pagina;
 
-// Patrón de Construcción Dinámica de Consultas
-$condicion_sql = "WHERE 1=1";
+// Construimos la cláusula WHERE y los parámetros dinámicamente.
+// El array $params pasa referencias para call_user_func_array con bind_param.
+$where  = "WHERE 1=1";
+$tipos  = "";
+$params = [];
 
 if (!empty($busqueda)) {
-    // Búsqueda Full-Text compleja: Buscamos coincidencias parciales en título, autor, 
-    // o incluso cruzando datos con la tabla de géneros mediante un sub-query EXISTS.
-    $condicion_sql .= " AND (o.titulo LIKE '%$busqueda%' OR o.autor LIKE '%$busqueda%' 
-                        OR EXISTS (SELECT 1 FROM obra_genero og JOIN generos g ON og.genero_id = g.id WHERE og.obra_id = o.id AND g.nombre LIKE '%$busqueda%'))";
+    // Búsqueda Full-Text: coincidencias en título, autor y géneros relacionados.
+    $like = "%$busqueda%";
+    $where .= " AND (o.titulo LIKE ? OR o.autor LIKE ?
+                OR EXISTS (SELECT 1 FROM obra_genero og JOIN generos g ON og.genero_id = g.id WHERE og.obra_id = o.id AND g.nombre LIKE ?))";
+    $tipos   .= "sss";
+    $params[] = &$like; $params[] = &$like; $params[] = &$like;
 }
 if (!empty($filtro_genero)) {
-    $condicion_sql .= " AND EXISTS (SELECT 1 FROM obra_genero og JOIN generos g ON og.genero_id = g.id WHERE og.obra_id = o.id AND g.nombre = '$filtro_genero')";
+    $where .= " AND EXISTS (SELECT 1 FROM obra_genero og JOIN generos g ON og.genero_id = g.id WHERE og.obra_id = o.id AND g.nombre = ?)";
+    $tipos   .= "s";
+    $params[] = &$filtro_genero;
 }
 if (!empty($filtro_autor)) {
-    $condicion_sql .= " AND o.autor = '$filtro_autor'";
+    $where .= " AND o.autor = ?";
+    $tipos   .= "s";
+    $params[] = &$filtro_autor;
 }
 
-// Cuantificamos el set de resultados tras aplicar los filtros para inicializar el paginador
-$sqlTotal = "SELECT COUNT(o.id) as total FROM obras o " . $condicion_sql;
-$resTotal = $conn->query($sqlTotal);
-$total_registros = $resTotal->fetch_assoc()['total'];
-$total_paginas = ceil($total_registros / $resultados_por_pagina);
-
+// Consulta de conteo para el paginador (mismos filtros, sin LIMIT).
+$stmtTotal = $conn->prepare("SELECT COUNT(o.id) as total FROM obras o $where");
+if (!empty($tipos)) {
+    $ba = array_merge([$tipos], $params);
+    call_user_func_array([$stmtTotal, 'bind_param'], $ba);
+}
+$stmtTotal->execute();
+$total_registros = $stmtTotal->get_result()->fetch_assoc()['total'];
+$total_paginas   = ceil($total_registros / $resultados_por_pagina);
 
 // =========================================================================================
 // 3. OBTENCIÓN DEL CATÁLOGO PRINCIPAL (EVITANDO N+1 PROBLEM)
 // =========================================================================================
-// NOTA ARQUITECTÓNICA: Para extraer las obras junto a sus valoraciones y géneros, NO hacemos 
-// un foreach posterior. Integramos todo en la propia extracción SQL usando subconsultas correlacionadas 
-// (AVG) y la función de agregación GROUP_CONCAT. Así, nos traemos toda la carga en una sola 
-// petición a la base de datos (Optimización de I/O de red).
-$sql = "SELECT o.*, 
+// Integramos valoraciones y géneros en la misma consulta SQL con subconsultas correlacionadas
+// (AVG, GROUP_CONCAT) para evitar múltiples viajes a la base de datos por obra.
+$sql = "SELECT o.*,
         (SELECT AVG(puntuacion) FROM resenas WHERE obra_id = o.id) as nota_media,
         (SELECT GROUP_CONCAT(g.nombre SEPARATOR ', ') FROM obra_genero og JOIN generos g ON og.genero_id = g.id WHERE og.obra_id = o.id) as generos
-        FROM obras o 
-        $condicion_sql 
-        ORDER BY o.id DESC 
-        LIMIT $resultados_por_pagina OFFSET $offset";
-$resultado = $conn->query($sql);
+        FROM obras o
+        $where
+        ORDER BY o.id DESC
+        LIMIT ? OFFSET ?";
+
+// Añadimos LIMIT y OFFSET como parámetros enlazados para cerrar completamente la superficie SQLi.
+$tipos_main  = $tipos . "ii";
+$params_main = $params;
+$params_main[] = &$resultados_por_pagina;
+$params_main[] = &$offset;
+
+$stmtMain = $conn->prepare($sql);
+$ba_main = array_merge([$tipos_main], $params_main);
+call_user_func_array([$stmtMain, 'bind_param'], $ba_main);
+$stmtMain->execute();
+$resultado = $stmtMain->get_result();
 
 
 // =========================================================================================

@@ -25,50 +25,44 @@ $adminActual = $_SESSION['usuario'];
 // Obligamos a que cualquier alteración de la base de datos venga por POST para prevenir
 // manipulaciones accidentales o ataques CSRF mediante enlaces pasados por GET.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && isset($_POST['id'])) {
-    $idTarget = intval($_POST['id']);
-    $accion = $_POST['accion'];
-    
-    // Obtenemos los datos del usuario objetivo para verificar contra las reglas de seguridad
-    $sqlCheck = "SELECT nombre FROM usuarios WHERE id = $idTarget";
-    $resCheck = $conn->query($sqlCheck);
-    $targetUser = $resCheck->fetch_assoc();
+    csrf_verify('/admin_usuarios');
 
-    // --- REGLA DE NEGOCIO: PROTECCIÓN CONTRA AUTO-SABOTAJE ---
-    // Impedimos que un administrador pueda borrar su propia cuenta, quitarse los permisos
-    // o suspenderse a sí mismo por error, lo que dejaría la plataforma sin control.
-    if ($targetUser['nombre'] === $adminActual) {
-        $msg = "❌ PROTECCIÓN: No puedes borrarte, suspenderte ni quitarte el admin a ti mismo.";
+    $idTarget = intval($_POST['id']);
+    $accion   = $_POST['accion'];
+
+    $stmtCheck = $conn->prepare("SELECT nombre FROM usuarios WHERE id = ?");
+    $stmtCheck->bind_param("i", $idTarget);
+    $stmtCheck->execute();
+    $targetUser = $stmtCheck->get_result()->fetch_assoc();
+
+    if (!$targetUser) {
+        $msg = "Usuario no encontrado.";
+        $tipo_msg = "danger";
+    } elseif ($targetUser['nombre'] === $adminActual) {
+        $msg = "Protección: No puedes modificarte a ti mismo.";
         $tipo_msg = "danger";
     } else {
-        // Enrutador de acciones administrativas
         if ($accion === 'hacer_admin') {
-            $conn->query("UPDATE usuarios SET rol = 'admin' WHERE id = $idTarget");
-            $msg = "Usuario ascendido a Administrador.";
-            $tipo_msg = "success";
+            $s = $conn->prepare("UPDATE usuarios SET rol = 'admin' WHERE id = ?");
+            $s->bind_param("i", $idTarget); $s->execute();
+            $msg = "Usuario ascendido a Administrador."; $tipo_msg = "success";
         } elseif ($accion === 'quitar_admin') {
-            $conn->query("UPDATE usuarios SET rol = 'lector' WHERE id = $idTarget");
-            $msg = "Usuario degradado a Lector.";
-            $tipo_msg = "warning";
+            $s = $conn->prepare("UPDATE usuarios SET rol = 'lector' WHERE id = ?");
+            $s->bind_param("i", $idTarget); $s->execute();
+            $msg = "Usuario degradado a Lector."; $tipo_msg = "warning";
         } elseif ($accion === 'borrar') {
-            $conn->query("DELETE FROM usuarios WHERE id = $idTarget");
-            $msg = "Usuario eliminado correctamente.";
-            $tipo_msg = "success";
+            $s = $conn->prepare("DELETE FROM usuarios WHERE id = ?");
+            $s->bind_param("i", $idTarget); $s->execute();
+            $msg = "Usuario eliminado correctamente."; $tipo_msg = "success";
         } elseif ($accion === 'suspender') {
-            // Lógica de Ban temporal: Calculamos un timestamp a 7 días vista.
-            // Cuando este tiempo expira, el sistema automáticamente le devuelve los permisos
-            // sin necesidad de intervención manual del administrador (Soft-Ban).
             $fechaBloqueo = date('Y-m-d H:i:s', strtotime('+7 days'));
-            $stmt = $conn->prepare("UPDATE usuarios SET fecha_desbloqueo = ? WHERE id = ?");
-            $stmt->bind_param("si", $fechaBloqueo, $idTarget);
-            if($stmt->execute()) {
-                $msg = "Usuario suspendido (Modo Lectura) por 7 días.";
-                $tipo_msg = "warning";
-            }
+            $s = $conn->prepare("UPDATE usuarios SET fecha_desbloqueo = ? WHERE id = ?");
+            $s->bind_param("si", $fechaBloqueo, $idTarget); $s->execute();
+            $msg = "Usuario suspendido por 7 días."; $tipo_msg = "warning";
         } elseif ($accion === 'quitar_suspension') {
-            // Levantamiento manual de castigo (Amnistía)
-            $conn->query("UPDATE usuarios SET fecha_desbloqueo = NULL WHERE id = $idTarget");
-            $msg = "Suspensión levantada. El usuario ya puede comentar.";
-            $tipo_msg = "success";
+            $s = $conn->prepare("UPDATE usuarios SET fecha_desbloqueo = NULL WHERE id = ?");
+            $s->bind_param("i", $idTarget); $s->execute();
+            $msg = "Suspensión levantada."; $tipo_msg = "success";
         }
     }
 }
@@ -78,38 +72,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && isset($_
 // 3. MOTOR DE BÚSQUEDA Y FILTRADO DINÁMICO
 // =========================================================================================
 $filtro_nombre = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
-$filtro_rol = isset($_GET['rol']) ? $_GET['rol'] : 'todos';
-$orden = isset($_GET['orden']) ? $_GET['orden'] : 'recientes';
+$filtro_rol    = isset($_GET['rol'])      ? trim($_GET['rol'])      : 'todos';
+$orden         = isset($_GET['orden'])    ? trim($_GET['orden'])    : 'recientes';
 
-// Construimos la consulta SQL de manera modular (Query Builder Pattern).
-// Añadimos la cláusula 1=1 para poder concatenar los 'AND' libremente según los filtros activos.
-$sql = "SELECT * FROM usuarios WHERE 1=1"; 
+// Query builder seguro con prepared statements
+$roles_validos = ['admin', 'lector', 'todos'];
+if (!in_array($filtro_rol, $roles_validos)) $filtro_rol = 'todos';
+$orden_sql = ($orden === 'antiguos') ? 'ORDER BY fecha_registro ASC' : 'ORDER BY fecha_registro DESC';
 
-// Búsqueda por string (permite buscar tanto por nombre de usuario como por email)
+$sql_base = "SELECT * FROM usuarios WHERE 1=1";
+$tipos  = "";
+$params = [];
+
 if (!empty($filtro_nombre)) {
-    $sql .= " AND (nombre LIKE '%$filtro_nombre%' OR email LIKE '%$filtro_nombre%')";
+    $sql_base .= " AND (nombre LIKE ? OR email LIKE ?)";
+    $like = "%$filtro_nombre%";
+    $tipos .= "ss";
+    $params[] = &$like; $params[] = &$like;
 }
-
-// Filtrado exacto por Rol
 if ($filtro_rol !== 'todos') {
-    $sql .= " AND rol = '$filtro_rol'";
+    $sql_base .= " AND rol = ?";
+    $tipos .= "s";
+    $params[] = &$filtro_rol;
 }
+$sql_base .= " $orden_sql";
 
-// Aplicación de ordenamiento cronológico
-if ($orden === 'antiguos') {
-    $sql .= " ORDER BY fecha_registro ASC";
-} else {
-    $sql .= " ORDER BY fecha_registro DESC"; 
+$stmtLista = $conn->prepare($sql_base);
+if (!empty($tipos)) {
+    $bind = array_merge([$tipos], $params);
+    call_user_func_array([$stmtLista, 'bind_param'], $bind);
 }
+$stmtLista->execute();
+$resultado = $stmtLista->get_result();
 
-$resultado = $conn->query($sql);
-
-// Transferimos el RecordSet a un array asociativo en memoria. 
-// Esto nos permite iterar sobre los mismos datos dos veces en la vista:
-// una vez para construir la tabla de escritorio, y otra para generar las tarjetas de móvil.
 $usuarios_lista = [];
 if ($resultado && $resultado->num_rows > 0) {
-    while($user = $resultado->fetch_assoc()) {
+    while ($user = $resultado->fetch_assoc()) {
         $usuarios_lista[] = $user;
     }
 }

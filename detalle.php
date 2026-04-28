@@ -35,24 +35,16 @@ $fechaDesbloqueoStr = '';
 $userId = null;
 
 if (isset($_SESSION['usuario'])) {
-    $nombreUser = $_SESSION['usuario'];
-    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
-
-    if ($resUser && $resUser->num_rows > 0) {
-        $userData = $resUser->fetch_assoc();
-        $userId = $userData['id'];
-
-        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
-            $estaSuspendido = true;
-            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
-        }
-    }
+    $estadoUser = get_estado_usuario($conn);
+    $userId = $estadoUser['id'];
+    $estaSuspendido = $estadoUser['suspendido'];
+    $fechaDesbloqueoStr = $estadoUser['hasta'] ?? '';
 }
 
 // =========================================================================================
 // 3. ANALÍTICAS: CONTADOR DE VISITAS
 // =========================================================================================
-$conn->query("UPDATE obras SET visitas = visitas + 1 WHERE id = $idObra");
+$conn->query("UPDATE obras SET visitas = visitas + 1 WHERE id = " . (int)$idObra);
 
 // =========================================================================================
 // 4. PROCESAMIENTO DE VALORACIONES Y RESEÑAS (POST)
@@ -85,8 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // B. LÓGICA DE MODERACIÓN (ELIMINACIÓN DE RESEÑAS)
     if (isset($_POST['borrar_resena']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        csrf_verify("/obra/$slug");
         $idResena = intval($_POST['borrar_resena']);
-        $conn->query("DELETE FROM resenas WHERE id = $idResena");
+        $stmtDel = $conn->prepare("DELETE FROM resenas WHERE id = ?");
+        $stmtDel->bind_param("i", $idResena);
+        $stmtDel->execute();
         header("Location: /obra/$slug");
         exit();
     }
@@ -107,8 +102,10 @@ if ($resultado->num_rows > 0) {
     $datos_obra = $resultado->fetch_assoc();
     $datos_obra['generos'] = !empty($datos_obra['generos_concat']) ? array_map('trim', explode(',', $datos_obra['generos_concat'])) : [];
 
-    $sqlNota = "SELECT AVG(puntuacion) as media, COUNT(id) as total_votos FROM resenas WHERE obra_id = $idObra";
-    $resNota = $conn->query($sqlNota)->fetch_assoc();
+    $stmtNota = $conn->prepare("SELECT AVG(puntuacion) as media, COUNT(id) as total_votos FROM resenas WHERE obra_id = ?");
+    $stmtNota->bind_param("i", $idObra);
+    $stmtNota->execute();
+    $resNota = $stmtNota->get_result()->fetch_assoc();
     $datos_obra['nota_media'] = $resNota['media'] ? round($resNota['media'], 1) : 0;
     $datos_obra['total_votos'] = $resNota['total_votos'];
 
@@ -117,19 +114,18 @@ if ($resultado->num_rows > 0) {
     $rol_usuario = isset($_SESSION['rol']) ? $_SESSION['rol'] : 'invitado';
 
     if ($usuario_logueado && $userId) {
-        $resFav = $conn->query("SELECT id FROM favoritos WHERE usuario_id = $userId AND obra_id = $idObra");
-        if ($resFav->num_rows > 0) {
-            $es_favorito = true;
-        }
+        $stmtFav = $conn->prepare("SELECT id FROM favoritos WHERE usuario_id = ? AND obra_id = ?");
+        $stmtFav->bind_param("ii", $userId, $idObra);
+        $stmtFav->execute();
+        $es_favorito = $stmtFav->get_result()->num_rows > 0;
 
         $capitulos_leidos = [];
         $max_cap_tocado = 0;
 
-        $sqlLeidos = "SELECT cl.capitulo_id, cl.ultima_pagina 
-                      FROM capitulos_leidos cl 
-                      JOIN capitulos c ON cl.capitulo_id = c.id 
-                      WHERE cl.usuario_id = $userId AND c.obra_id = $idObra";
-        $resLeidos = $conn->query($sqlLeidos);
+        $stmtLeidos = $conn->prepare("SELECT cl.capitulo_id, cl.ultima_pagina FROM capitulos_leidos cl JOIN capitulos c ON cl.capitulo_id = c.id WHERE cl.usuario_id = ? AND c.obra_id = ?");
+        $stmtLeidos->bind_param("ii", $userId, $idObra);
+        $stmtLeidos->execute();
+        $resLeidos = $stmtLeidos->get_result();
 
         while ($row = $resLeidos->fetch_assoc()) {
             $capitulos_leidos[$row['capitulo_id']] = $row['ultima_pagina'];
@@ -141,7 +137,10 @@ if ($resultado->num_rows > 0) {
         $datos_obra['max_cap_tocado'] = $max_cap_tocado;
     }
 
-    $resCaps = $conn->query("SELECT id, titulo, slug, fecha_subida, contenido FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC");
+    $stmtCaps = $conn->prepare("SELECT id, titulo, slug, fecha_subida, contenido FROM capitulos WHERE obra_id = ? ORDER BY id ASC");
+    $stmtCaps->bind_param("i", $idObra);
+    $stmtCaps->execute();
+    $resCaps = $stmtCaps->get_result();
     $capitulos = [];
     while ($cap = $resCaps->fetch_assoc()) {
         $imagenes = json_decode($cap['contenido'], true);
@@ -155,12 +154,10 @@ if ($resultado->num_rows > 0) {
 // =========================================================================================
 // 6. RENDERIZADO DE OPINIONES
 // =========================================================================================
-$sqlResenas = "SELECT r.*, u.nombre, u.foto, u.rol 
-               FROM resenas r 
-               JOIN usuarios u ON r.usuario_id = u.id 
-               WHERE r.obra_id = $idObra 
-               ORDER BY r.fecha DESC";
-$lista_resenas = $conn->query($sqlResenas);
+$stmtResenas = $conn->prepare("SELECT r.*, u.nombre, u.foto, u.rol FROM resenas r JOIN usuarios u ON r.usuario_id = u.id WHERE r.obra_id = ? ORDER BY r.fecha DESC");
+$stmtResenas->bind_param("i", $idObra);
+$stmtResenas->execute();
+$lista_resenas = $stmtResenas->get_result();
 
 function pintarEstrellas($nota)
 {

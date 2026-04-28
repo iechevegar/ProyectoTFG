@@ -2,46 +2,120 @@
 // =========================================================================================
 // LIBRERÍA DE FUNCIONES GLOBALES (CORE UTILITIES)
 // =========================================================================================
-// Centralizamos algoritmos de uso transversal en este archivo para cumplir con 
-// el principio de ingeniería de software DRY (Don't Repeat Yourself), 
-// facilitando la mantenibilidad y escalabilidad del código.
 
 /**
- * Generador de Slugs (Enrutamiento Semántico)
- * * Transforma cadenas de texto natural (ej: "¿Qué opináis del final?") 
- * en identificadores URL-friendly y seguros (ej: "que-opinais-del-final").
- * * Beneficios Arquitectónicos:
- * - SEO Optimization: Permite indexar palabras clave en la URL.
- * - Seguridad (B-IDOR Mitigation): Sustituye el uso de Primary Keys numéricas expuestas al cliente.
- *
- * @param string $string La cadena de texto original (payload).
- * @return string El slug purificado.
+ * Generador de Slugs. Transforma texto natural en identificadores URL-friendly.
  */
 function limpiarURL($string) {
-    
-    // --- FASE 1: NORMALIZACIÓN BASE ---
-    // Reducimos la entropía del input. Convertimos todo a minúsculas para evitar
-    // duplicidades lógicas (ej: "Manga" vs "manga") y podamos hacer match exacto en la BD.
-    // trim() elimina caracteres invisibles (espacios, saltos de línea) en los extremos.
     $string = strtolower(trim($string));
-    
-    // --- FASE 2: SANITIZACIÓN ESTRICTA (RegEx Whitelisting) ---
-    // Utilizamos Expresiones Regulares para aplicar una política de "Lista Blanca".
-    // El patrón '/[^a-z0-9-]/' busca CUALQUIER carácter que NO sea una letra inglesa (a-z), 
-    // un dígito (0-9) o un guion medio (-), y lo sustituye por un guion.
-    // Esto purga instantáneamente signos de interrogación, espacios, comillas y caracteres especiales 
-    // que corromperían la estructura de una petición HTTP RESTful.
-    $string = preg_replace('/[^a-z0-9-]/', '-', $string); 
-    
-    // --- FASE 3: COMPRESIÓN DE REDUNDANCIAS ---
-    // El paso anterior suele dejar "basura estructural" (ej: "solo !leveling!" -> "solo--leveling-").
-    // Este RegEx '/-+/' localiza secuencias de uno o más guiones consecutivos y 
-    // los colapsa en un único guion, optimizando la longitud del string.
-    $string = preg_replace('/-+/', '-', $string); 
-    
-    // --- FASE 4: LIMPIEZA DE BORDES (EDGE TRIMMING) ---
-    // Un slug que empieza o termina por guion se considera un antipatrón de diseño de URLs.
-    // Le indicamos a trim() que, en lugar de espacios, mutile los guiones de los extremos.
-    return trim($string, '-'); 
+    $string = preg_replace('/[^a-z0-9-]/', '-', $string);
+    $string = preg_replace('/-+/', '-', $string);
+    return trim($string, '-');
 }
-?>
+
+// =========================================================================================
+// PROTECCIÓN CSRF
+// =========================================================================================
+
+/** Genera (o recupera) el token CSRF de la sesión. Llamar tras session_start(). */
+function csrf_token() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/** Devuelve un campo hidden con el token CSRF para insertar en formularios. */
+function csrf_field() {
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token()) . '">';
+}
+
+/**
+ * Verifica el token CSRF del POST. Si falla, redirige y aborta.
+ * @param string $redirect URL de redirección en caso de fallo.
+ */
+function csrf_verify($redirect = '/') {
+    if (empty($_POST['csrf_token']) || !hash_equals(csrf_token(), $_POST['csrf_token'])) {
+        header("Location: $redirect");
+        exit();
+    }
+}
+
+// =========================================================================================
+// RATE LIMITING EN LOGIN (ANTI FUERZA BRUTA)
+// =========================================================================================
+
+/**
+ * Comprueba si el usuario está bloqueado por demasiados intentos fallidos.
+ * @param int $max_intentos  Intentos antes del bloqueo (defecto: 5).
+ * @param int $ventana_seg   Duración del bloqueo en segundos (defecto: 5 min).
+ * @return bool true = bloqueado.
+ */
+function rate_limit_login($max_intentos = 5, $ventana_seg = 300) {
+    $ahora = time();
+    if (isset($_SESSION['login_time']) && ($ahora - $_SESSION['login_time']) > $ventana_seg) {
+        $_SESSION['login_attempts'] = 0;
+        $_SESSION['login_time'] = $ahora;
+    }
+    if (!isset($_SESSION['login_attempts'])) {
+        $_SESSION['login_attempts'] = 0;
+        $_SESSION['login_time'] = $ahora;
+    }
+    return $_SESSION['login_attempts'] >= $max_intentos;
+}
+
+/** Incrementa el contador de intentos fallidos. */
+function rate_limit_fail() {
+    $_SESSION['login_attempts'] = ($_SESSION['login_attempts'] ?? 0) + 1;
+    if (!isset($_SESSION['login_time'])) $_SESSION['login_time'] = time();
+}
+
+/** Resetea el contador tras login exitoso. */
+function rate_limit_reset() {
+    $_SESSION['login_attempts'] = 0;
+    unset($_SESSION['login_time']);
+}
+
+/** Devuelve minutos restantes de bloqueo. */
+function rate_limit_minutos_restantes($ventana_seg = 300) {
+    if (!isset($_SESSION['login_time'])) return 0;
+    $restantes = $ventana_seg - (time() - $_SESSION['login_time']);
+    return $restantes > 0 ? ceil($restantes / 60) : 0;
+}
+
+// =========================================================================================
+// HELPERS DE SESIÓN / USUARIO
+// =========================================================================================
+
+/**
+ * Devuelve el estado del usuario logueado: ID y si está suspendido.
+ * Usa prepared statement internamente.
+ * @param mysqli $conn
+ * @return array ['suspendido'=>bool, 'hasta'=>string|null, 'id'=>int|null]
+ */
+function get_estado_usuario($conn) {
+    $resultado = ['suspendido' => false, 'hasta' => null, 'id' => null];
+    if (!isset($_SESSION['usuario'])) return $resultado;
+    $stmt = $conn->prepare("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = ?");
+    $stmt->bind_param("s", $_SESSION['usuario']);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res->num_rows === 0) return $resultado;
+    $row = $res->fetch_assoc();
+    $resultado['id'] = (int) $row['id'];
+    if (!empty($row['fecha_desbloqueo']) && strtotime($row['fecha_desbloqueo']) > time()) {
+        $resultado['suspendido'] = true;
+        $resultado['hasta'] = date('d/m/Y H:i', strtotime($row['fecha_desbloqueo']));
+    }
+    return $resultado;
+}
+
+/** Escapa string para salida HTML segura. */
+function h($str) {
+    return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
+}
+
+/** Valida formato de email. */
+function validar_email($email) {
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}

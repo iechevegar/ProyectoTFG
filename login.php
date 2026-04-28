@@ -20,62 +20,44 @@ if (isset($_SESSION['usuario'])) {
 // =========================================================================================
 // Solo evaluamos la lógica de autenticación si la petición llega por el método POST.
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    
-    // Sanitización básica: Eliminamos espacios accidentales al inicio/final del input
-    $user = trim($_POST['usuario']);
-    $pass = trim($_POST['password']);
 
-    // --- DEFENSA CONTRA INYECCIÓN SQL (SQLi) ---
-    // En el punto más crítico de la aplicación (el login), es imperativo utilizar 
-    // Prepared Statements (Sentencias Preparadas). Esto separa la lógica SQL de los 
-    // datos del usuario, haciendo imposible que inyecten comandos como "' OR 1=1 --".
-    $sql = "SELECT nombre, password, rol, foto FROM usuarios WHERE nombre = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("s", $user);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
+    // CSRF: verificar token antes de procesar nada
+    csrf_verify('/login');
 
-    // Verificamos que el usuario exista y sea único
-    if ($resultado->num_rows === 1) {
-        $fila = $resultado->fetch_assoc();
-        
-        // =========================================================================================
-        // 3. VALIDACIÓN CRIPTOGRÁFICA HÍBRIDA
-        // =========================================================================================
-        // Implementamos un enfoque de doble validación transitorio:
-        // 1. password_verify(): Valida hashes seguros generados con Bcrypt (Estándar de producción).
-        // 2. ===: Mantiene compatibilidad temporal con usuarios semilla/legacy cuyas 
-        //    contraseñas se insertaron en texto plano durante la fase inicial de desarrollo.
-        if (password_verify($pass, $fila['password']) || $pass === $fila['password']) {
-            
-            // --- MITIGACIÓN DE ATAQUES DE SESSION FIXATION ---
-            // Al autenticar al usuario, destruimos el ID de sesión anónimo anterior y generamos 
-            // uno completamente nuevo. Esto evita que un atacante que haya forzado un ID de sesión 
-            // previo pueda secuestrar la cuenta una vez que la víctima inicie sesión.
-            session_regenerate_id(true);
-            
-            // Hidratamos las variables de sesión con la identidad y el Rol (RBAC)
-            $_SESSION['usuario'] = $fila['nombre'];
-            $_SESSION['rol'] = $fila['rol'];
-            
-            // Almacenamos el avatar para renderizado global. Si la columna es NULL, se manejará dinámicamente en la UI.
-            $_SESSION['foto'] = $fila['foto'];
-            
-            // Patrón PRG (Post/Redirect/Get) hacia el dashboard principal
-            header("Location: /");
-            exit();
-        } else {
-            // Nota de Seguridad: Evitamos decir "Contraseña incorrecta". Devolvemos un error genérico
-            // ("Credenciales inválidas" o similar) para no dar pistas en ataques de enumeración de usuarios.
-            // (He mantenido tu texto original, pero puedes cambiarlo a "Usuario o contraseña incorrectos" en producción).
-            $error = "Contraseña incorrecta.";
-        }
+    // Rate limiting: bloquear tras 5 intentos fallidos (5 min)
+    if (rate_limit_login()) {
+        $mins = rate_limit_minutos_restantes();
+        $error = "Demasiados intentos fallidos. Espera {$mins} minuto(s) e inténtalo de nuevo.";
     } else {
-        $error = "Usuario no encontrado.";
+        $user = trim($_POST['usuario']);
+        $pass = trim($_POST['password']);
+
+        $stmt = $conn->prepare("SELECT nombre, password, rol, foto FROM usuarios WHERE nombre = ?");
+        $stmt->bind_param("s", $user);
+        $stmt->execute();
+        $resultado = $stmt->get_result();
+
+        if ($resultado->num_rows === 1) {
+            $fila = $resultado->fetch_assoc();
+            if (password_verify($pass, $fila['password']) || $pass === $fila['password']) {
+                session_regenerate_id(true);
+                $_SESSION['usuario'] = $fila['nombre'];
+                $_SESSION['rol']     = $fila['rol'];
+                $_SESSION['foto']    = $fila['foto'];
+                rate_limit_reset();
+                header("Location: /");
+                exit();
+            } else {
+                rate_limit_fail();
+                // Mensaje genérico: no revelamos si el usuario existe (anti-enumeration)
+                $error = "Credenciales incorrectas.";
+            }
+        } else {
+            rate_limit_fail();
+            $error = "Credenciales incorrectas.";
+        }
+        $stmt->close();
     }
-    
-    // Liberamos los recursos del motor de base de datos
-    $stmt->close();
 }
 ?>
 <!DOCTYPE html>
@@ -112,11 +94,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         <?php if($error): ?>
             <div class="alert alert-danger py-2 px-3 text-start shadow-sm border-danger rounded-3" style="font-size: 0.9rem;">
-                <i class="fas fa-exclamation-triangle me-2"></i> <?php echo $error; ?>
+                <i class="fas fa-exclamation-triangle me-2"></i> <?php echo h($error); ?>
             </div>
         <?php endif; ?>
 
         <form method="POST" action="">
+            <?php echo csrf_field(); ?>
             <div class="mb-4 text-start">
                 <label class="form-label fw-bold text-secondary small text-uppercase">Nombre de Usuario</label>
                 <div class="input-group shadow-sm">

@@ -19,20 +19,23 @@ $error = '';
 // 2. PROCESAMIENTO DEL PAYLOAD DE REGISTRO (MÉTODO POST)
 // =========================================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Sanitización inicial: Eliminamos espacios colaterales introducidos accidentalmente por el usuario.
-    $nombre = trim($_POST['usuario']);
-    $email = trim($_POST['email']);
-    $pass = trim($_POST['password']);
+    csrf_verify('/registro');
+
+    $nombre       = trim($_POST['usuario']);
+    $email        = trim($_POST['email']);
+    $pass         = trim($_POST['password']);
     $confirm_pass = trim($_POST['confirm_password']);
 
-    // --- FASE A: VALIDACIONES LÓGICAS (BUSINESS RULES) ---
-    // Verificamos la integridad estructural de los datos antes de tocar la base de datos.
     if (empty($nombre) || empty($email) || empty($pass)) {
-        $error = "Fallo de validación: Se requiere rellenar todos los campos obligatorios.";
+        $error = "Todos los campos son obligatorios.";
+    } elseif (!validar_email($email)) {
+        $error = "El formato del correo electrónico no es válido.";
+    } elseif (strlen($nombre) < 3 || strlen($nombre) > 50) {
+        $error = "El nombre de usuario debe tener entre 3 y 50 caracteres.";
     } elseif ($pass !== $confirm_pass) {
-        $error = "Las credenciales no coinciden. Por favor, verifica tu contraseña.";
+        $error = "Las contraseñas no coinciden.";
     } elseif (strlen($pass) < 6) {
-        $error = "Política de seguridad: La contraseña debe tener una entropía mínima de 6 caracteres.";
+        $error = "La contraseña debe tener al menos 6 caracteres.";
     } else {
         
         // --- FASE B: DETECCIÓN DE COLISIONES (UNIQUE CONSTRAINTS) ---
@@ -126,6 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <?php endif; ?>
 
         <form method="POST" action="">
+            <?php echo csrf_field(); ?>
             <div class="mb-4 text-start">
                 <label class="form-label fw-bold text-secondary small text-uppercase">Nombre de Usuario</label>
                 <div class="input-group shadow-sm">

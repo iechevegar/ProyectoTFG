@@ -141,36 +141,53 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 }
 
 // =========================================================================================
-// 4. EXTRACCIÓN DE TELEMETRÍA DE USUARIO (ACTIVITY LOGS)
+// 4. EXTRACCIÓN DE ACTIVIDAD DEL USUARIO (PREPARED STATEMENTS)
 // =========================================================================================
-// Limitamos rígidamente los resultados (LIMIT 10) para no saturar la memoria del servidor 
-// y optimizar el tiempo de renderizado de la UI de perfil.
+// Limitamos a 10 registros por sección para no saturar la memoria en perfiles muy activos.
 
-// A. Trazabilidad en Capítulos
-$sqlCom = "SELECT c.texto, c.fecha, cap.id as cap_id, cap.titulo as cap_titulo, cap.slug as cap_slug, o.id as obra_id, o.titulo as obra_titulo, o.slug as obra_slug 
-           FROM comentarios c 
-           JOIN capitulos cap ON c.capitulo_id = cap.id 
-           JOIN obras o ON cap.obra_id = o.id 
-           WHERE c.usuario_id = $userId ORDER BY c.fecha DESC LIMIT 10";
-$mis_comentarios = $conn->query($sqlCom);
+// A. Comentarios en capítulos del visor
+$stmtCom = $conn->prepare(
+    "SELECT c.texto, c.fecha, cap.id as cap_id, cap.titulo as cap_titulo, cap.slug as cap_slug,
+            o.id as obra_id, o.titulo as obra_titulo, o.slug as obra_slug
+     FROM comentarios c
+     JOIN capitulos cap ON c.capitulo_id = cap.id
+     JOIN obras o ON cap.obra_id = o.id
+     WHERE c.usuario_id = ? ORDER BY c.fecha DESC LIMIT 10"
+);
+$stmtCom->bind_param("i", $userId);
+$stmtCom->execute();
+$mis_comentarios = $stmtCom->get_result();
 
-// B. Trazabilidad de Reseñas Críticas
-$sqlRes = "SELECT r.texto, r.fecha, r.puntuacion, o.id as obra_id, o.titulo as obra_titulo, o.slug as obra_slug 
-           FROM resenas r 
-           JOIN obras o ON r.obra_id = o.id 
-           WHERE r.usuario_id = $userId ORDER BY r.fecha DESC LIMIT 10";
-$mis_resenas = $conn->query($sqlRes);
+// B. Reseñas críticas de obras
+$stmtRes = $conn->prepare(
+    "SELECT r.texto, r.fecha, r.puntuacion, o.id as obra_id, o.titulo as obra_titulo, o.slug as obra_slug
+     FROM resenas r
+     JOIN obras o ON r.obra_id = o.id
+     WHERE r.usuario_id = ? ORDER BY r.fecha DESC LIMIT 10"
+);
+$stmtRes->bind_param("i", $userId);
+$stmtRes->execute();
+$mis_resenas = $stmtRes->get_result();
 
-// C. Trazabilidad de Aportaciones al Foro (Entidades Padre)
-$sqlTemas = "SELECT id, titulo, slug, fecha, categoria FROM foro_temas WHERE usuario_id = $userId ORDER BY fecha DESC LIMIT 10";
-$mis_temas = $conn->query($sqlTemas);
+// C. Temas del foro creados por el usuario
+$stmtTemas = $conn->prepare(
+    "SELECT id, titulo, slug, fecha, categoria FROM foro_temas
+     WHERE usuario_id = ? ORDER BY fecha DESC LIMIT 10"
+);
+$stmtTemas->bind_param("i", $userId);
+$stmtTemas->execute();
+$mis_temas = $stmtTemas->get_result();
 
-// D. Trazabilidad de Respuestas al Foro (Entidades Hija)
-$sqlRespuestas = "SELECT r.mensaje, r.fecha, t.id as tema_id, t.titulo as tema_titulo, t.slug as tema_slug 
-                  FROM foro_respuestas r 
-                  JOIN foro_temas t ON r.tema_id = t.id 
-                  WHERE r.usuario_id = $userId ORDER BY r.fecha DESC LIMIT 10";
-$mis_respuestas_foro = $conn->query($sqlRespuestas);
+// D. Respuestas del usuario en hilos ajenos
+$stmtResp = $conn->prepare(
+    "SELECT r.mensaje, r.fecha, t.id as tema_id, t.titulo as tema_titulo, t.slug as tema_slug
+     FROM foro_respuestas r
+     JOIN foro_temas t ON r.tema_id = t.id
+     WHERE r.usuario_id = ? ORDER BY r.fecha DESC LIMIT 10"
+);
+$stmtResp->bind_param("i", $userId);
+$stmtResp->execute();
+$mis_respuestas_foro = $stmtResp->get_result();
 
 ?>
 <?php include 'includes/header.php'; ?>

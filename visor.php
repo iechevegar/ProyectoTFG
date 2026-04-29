@@ -49,19 +49,11 @@ $fechaDesbloqueoStr = '';
 $userId = null;
 
 if (isset($_SESSION['usuario'])) {
-    $nombreUser = $_SESSION['usuario'];
-    $resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
-
-    if ($resUser && $resUser->num_rows > 0) {
-        $userData = $resUser->fetch_assoc();
-        $userId = $userData['id'];
-
-        // Verificamos si existe una restricción temporal activa para bloquear la participación
-        if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
-            $estaSuspendido = true;
-            $fechaDesbloqueoStr = date('d/m/Y H:i', strtotime($userData['fecha_desbloqueo']));
-        }
-    }
+    // get_estado_usuario() centraliza la lógica de suspensión usando prepared statement (Anti-SQLi).
+    $estadoUser = get_estado_usuario($conn);
+    $userId             = $estadoUser['id'];
+    $estaSuspendido     = $estadoUser['suspendido'];
+    $fechaDesbloqueoStr = $estadoUser['hasta'] ?? '';
 }
 
 // =========================================================================================
@@ -117,8 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- HERRAMIENTA DE MODERACIÓN (BORRADO ADMINISTRATIVO) ---
     if (isset($_POST['borrar_comentario']) && isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin') {
+        csrf_verify($url_redireccion);
         $idCom = intval($_POST['borrar_comentario']);
-        $conn->query("DELETE FROM comentarios WHERE id = $idCom");
+        $stmtDelCom = $conn->prepare("DELETE FROM comentarios WHERE id = ?");
+        $stmtDelCom->bind_param("i", $idCom);
+        $stmtDelCom->execute();
         header("Location: $url_redireccion");
         exit();
     }
@@ -151,13 +146,17 @@ if (!is_array($lista_imagenes)) {
     $lista_imagenes = [];
 }
 
-// Extracción de la sección de comentarios
-$sqlCom = "SELECT c.*, u.nombre, u.foto, u.rol 
-           FROM comentarios c 
-           JOIN usuarios u ON c.usuario_id = u.id 
-           WHERE c.capitulo_id = $capId 
-           ORDER BY c.fecha DESC";
-$resCom = $conn->query($sqlCom);
+// La query de comentarios en capítulos usa prepared statement para evitar SQLi.
+$stmtCom = $conn->prepare(
+    "SELECT c.*, u.nombre, u.foto, u.rol
+     FROM comentarios c
+     JOIN usuarios u ON c.usuario_id = u.id
+     WHERE c.capitulo_id = ?
+     ORDER BY c.fecha DESC"
+);
+$stmtCom->bind_param("i", $capId);
+$stmtCom->execute();
+$resCom = $stmtCom->get_result();
 ?>
 <!DOCTYPE html>
 <html lang="es">

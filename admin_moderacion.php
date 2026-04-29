@@ -18,21 +18,26 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'admin') {
 // Procesamos las solicitudes de borrado de contenido de forma unificada.
 // Exigimos método POST para prevenir vulnerabilidades CSRF y borrados accidentales vía GET.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['borrar']) && isset($_POST['tipo']) && isset($_POST['id'])) {
+    csrf_verify('/admin_moderacion');
+
     $tipo = $_POST['tipo'];
-    $id = intval($_POST['id']);
-    
-    // Enrutamos la consulta de borrado hacia la tabla correspondiente según el origen del reporte
-    if ($tipo === 'resena') {
-        $conn->query("DELETE FROM resenas WHERE id = $id");
-    } elseif ($tipo === 'comentario') {
-        $conn->query("DELETE FROM comentarios WHERE id = $id");
-    } elseif ($tipo === 'foro_tema') {
-        $conn->query("DELETE FROM foro_temas WHERE id = $id");
-    } elseif ($tipo === 'foro_respuesta') {
-        $conn->query("DELETE FROM foro_respuestas WHERE id = $id");
+    $id   = intval($_POST['id']);
+
+    // Enrutamos el borrado a la tabla correspondiente mediante prepared statement (Anti-SQLi).
+    $tablas = [
+        'resena'         => 'resenas',
+        'comentario'     => 'comentarios',
+        'foro_tema'      => 'foro_temas',
+        'foro_respuesta' => 'foro_respuestas',
+    ];
+
+    if (isset($tablas[$tipo])) {
+        $tabla = $tablas[$tipo];
+        $s = $conn->prepare("DELETE FROM $tabla WHERE id = ?");
+        $s->bind_param("i", $id);
+        $s->execute();
     }
-    
-    // Patrón PRG (Post/Redirect/Get) para evitar el reenvío del formulario al recargar la página
+
     header("Location: /admin_moderacion.php?msg=Contenido eliminado correctamente");
     exit();
 }
@@ -169,8 +174,9 @@ if ($res_actividad && $res_actividad->num_rows > 0) {
                                 <td class="text-end pe-4 py-4 border-light">
                                     <form action="/admin_moderacion.php" method="POST" class="d-flex justify-content-end" onsubmit="return confirm('¿Eliminar este contenido permanentemente?');">
                                         <input type="hidden" name="borrar" value="1">
-                                        <input type="hidden" name="tipo" value="<?php echo $item['tipo']; ?>">
-                                        <input type="hidden" name="id" value="<?php echo $item['id']; ?>">
+                                        <input type="hidden" name="tipo" value="<?php echo h($item['tipo']); ?>">
+                                        <input type="hidden" name="id" value="<?php echo (int)$item['id']; ?>">
+                                        <?php echo csrf_field(); ?>
                                         
                                         <button type="submit" class="btn btn-outline-danger shadow-sm d-inline-flex align-items-center justify-content-center hover-trash" title="Borrar definitivamente" style="width: 38px; height: 38px; border-radius: 50%; padding: 0; border: 1px solid #dc3545;">
                                             <i class="fas fa-trash-alt m-0 p-0"></i>

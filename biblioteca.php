@@ -15,19 +15,25 @@ if (!isset($_SESSION['usuario'])) {
 // =========================================================================================
 // 2. RESOLUCIÓN DE IDENTIDAD Y EXTRACCIÓN DE DATOS
 // =========================================================================================
-// Obtenemos el identificador relacional (Primary Key) del usuario activo.
-$nombreUser = $_SESSION['usuario'];
-$resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
-$userId = $resUser->fetch_assoc()['id'];
+// Obtenemos el ID del usuario mediante prepared statement (Anti-SQLi).
+$userId = get_usuario_id($conn);
 
-// Extracción del catálogo personalizado: Realizamos un JOIN entre la tabla de obras
-// y la tabla pivote de favoritos para recuperar únicamente las series seguidas por este usuario,
-// priorizando (ORDER BY) las agregadas más recientemente.
-$sql = "SELECT o.* FROM obras o 
-        JOIN favoritos f ON o.id = f.obra_id 
-        WHERE f.usuario_id = $userId 
-        ORDER BY f.fecha_agregado DESC";
-$resultado = $conn->query($sql);
+if (!$userId) {
+    header("Location: /login");
+    exit();
+}
+
+// Extracción del catálogo personal: JOIN entre obras y favoritos filtrado por usuario.
+// ORDER BY fecha_agregado DESC prioriza las obras añadidas más recientemente.
+$stmtBib = $conn->prepare(
+    "SELECT o.* FROM obras o
+     JOIN favoritos f ON o.id = f.obra_id
+     WHERE f.usuario_id = ?
+     ORDER BY f.fecha_agregado DESC"
+);
+$stmtBib->bind_param("i", $userId);
+$stmtBib->execute();
+$resultado = $stmtBib->get_result();
 ?>
 <?php include 'includes/header.php'; ?>
 
@@ -53,36 +59,46 @@ $resultado = $conn->query($sql);
                 // =========================================================================================
                 // 3. ALGORITMO DE TRACKING DE LECTURA (HEURÍSTICA DE PROGRESO)
                 // =========================================================================================
-                
-                // Paso 3.1: Cuantificamos el volumen total de contenido serializado de la obra actual.
-                $resTotal = $conn->query("SELECT COUNT(*) as total FROM capitulos WHERE obra_id = $idObra");
-                $totalCaps = $resTotal->fetch_assoc()['total'];
 
-                // Paso 3.2: Determinamos el límite superior (High-Water Mark) de lectura del usuario.
-                // Buscamos el ID más alto con el que el usuario ha interactuado en esta obra específica.
-                $sqlMaxCap = "SELECT MAX(c.id) as max_id 
-                              FROM capitulos_leidos cl 
-                              JOIN capitulos c ON cl.capitulo_id = c.id 
-                              WHERE c.obra_id = $idObra AND cl.usuario_id = $userId";
-                $maxCapId = $conn->query($sqlMaxCap)->fetch_assoc()['max_id'];
+                // Paso 3.1: Total de capítulos serializados de la obra.
+                $stmtTC = $conn->prepare("SELECT COUNT(*) as total FROM capitulos WHERE obra_id = ?");
+                $stmtTC->bind_param("i", $idObra);
+                $stmtTC->execute();
+                $totalCaps = $stmtTC->get_result()->fetch_assoc()['total'];
+
+                // Paso 3.2: ID más alto con el que el usuario ha interactuado (High-Water Mark).
+                $stmtMax = $conn->prepare(
+                    "SELECT MAX(c.id) as max_id FROM capitulos_leidos cl
+                     JOIN capitulos c ON cl.capitulo_id = c.id
+                     WHERE c.obra_id = ? AND cl.usuario_id = ?"
+                );
+                $stmtMax->bind_param("ii", $idObra, $userId);
+                $stmtMax->execute();
+                $maxCapId = $stmtMax->get_result()->fetch_assoc()['max_id'];
 
                 $capsLeidosCompletados = 0;
 
                 if ($maxCapId) {
-                    // Contamos cuántos capítulos existen desde el inicio hasta la marca máxima.
-                    $sqlPos = "SELECT COUNT(*) as leidos FROM capitulos WHERE obra_id = $idObra AND id <= $maxCapId";
-                    $capsLeidosCompletados = $conn->query($sqlPos)->fetch_assoc()['leidos'];
+                    // Capítulos hasta la marca máxima
+                    $stmtPos = $conn->prepare("SELECT COUNT(*) as leidos FROM capitulos WHERE obra_id = ? AND id <= ?");
+                    $stmtPos->bind_param("ii", $idObra, $maxCapId);
+                    $stmtPos->execute();
+                    $capsLeidosCompletados = $stmtPos->get_result()->fetch_assoc()['leidos'];
 
-                    // Control de granularidad (Lectura Parcial): Analizamos el payload JSON del último capítulo tocado
-                    // para saber si el usuario lo terminó o si lo dejó a medias.
-                    $sqlUltimoToque = "SELECT cl.ultima_pagina, c.contenido FROM capitulos_leidos cl JOIN capitulos c ON cl.capitulo_id = c.id WHERE c.id = $maxCapId AND cl.usuario_id = $userId";
-                    $ultimoToque = $conn->query($sqlUltimoToque)->fetch_assoc();
-                    $imagenes = json_decode($ultimoToque['contenido'], true);
+                    // Comprobamos si el último capítulo tocado está completo o a medias
+                    $stmtUT = $conn->prepare(
+                        "SELECT cl.ultima_pagina, c.contenido FROM capitulos_leidos cl
+                         JOIN capitulos c ON cl.capitulo_id = c.id
+                         WHERE c.id = ? AND cl.usuario_id = ?"
+                    );
+                    $stmtUT->bind_param("ii", $maxCapId, $userId);
+                    $stmtUT->execute();
+                    $ultimoToque = $stmtUT->get_result()->fetch_assoc();
+                    $imagenes     = json_decode($ultimoToque['contenido'], true);
                     $totalPaginas = is_array($imagenes) ? count($imagenes) : 1;
-                    $pag = intval($ultimoToque['ultima_pagina']);
+                    $pag          = intval($ultimoToque['ultima_pagina']);
 
-                    // Si el marcador de página es mayor que 0 pero no llega al total de páginas del JSON,
-                    // el capítulo está "En curso", por lo que lo restamos del total de "Completados".
+                    // Si está a medias, no lo contamos como completado
                     if ($pag > 0 && $pag < $totalPaginas) {
                         $capsLeidosCompletados--;
                     }
@@ -91,14 +107,17 @@ $resultado = $conn->query($sql);
                 // =========================================================================================
                 // 4. LÓGICA DE ENRUTAMIENTO PREDICTIVO (NEXT ACTION)
                 // =========================================================================================
-                // Evaluamos el estado actual para inferir cuál es el botón más útil para el usuario
-                // (Retomar donde lo dejó, leer el siguiente capítulo, o avisarle de que está al día).
-                $sqlUltimo = "SELECT c.id, c.titulo, c.slug, cl.ultima_pagina, c.contenido 
-                              FROM capitulos_leidos cl 
-                              JOIN capitulos c ON cl.capitulo_id = c.id 
-                              WHERE c.obra_id = $idObra AND cl.usuario_id = $userId 
-                              ORDER BY c.id DESC LIMIT 1";
-                $resUltimo = $conn->query($sqlUltimo);
+                // Inferimos el botón más útil según el estado de lectura del usuario.
+                $stmtUlt = $conn->prepare(
+                    "SELECT c.id, c.titulo, c.slug, cl.ultima_pagina, c.contenido
+                     FROM capitulos_leidos cl
+                     JOIN capitulos c ON cl.capitulo_id = c.id
+                     WHERE c.obra_id = ? AND cl.usuario_id = ?
+                     ORDER BY c.id DESC LIMIT 1"
+                );
+                $stmtUlt->bind_param("ii", $idObra, $userId);
+                $stmtUlt->execute();
+                $resUltimo = $stmtUlt->get_result();
 
                 $url_detalles = "/obra/" . $obraSlug;
                 $url_continuar = $url_detalles;
@@ -114,9 +133,11 @@ $resultado = $conn->query($sql);
                     $capIdActual = $ultimoCap['id'];
 
                     if ($pagLeida >= $totalPaginasCap || $pagLeida === 0) {
-                        // Estado A: El capítulo actual está terminado. Buscamos secuencialmente el siguiente ID.
-                        $sqlNext = "SELECT titulo, slug FROM capitulos WHERE obra_id = $idObra AND id > $capIdActual ORDER BY id ASC LIMIT 1";
-                        $resNext = $conn->query($sqlNext);
+                        // Siguiente capítulo disponible tras el actual
+                            $stmtNext = $conn->prepare("SELECT titulo, slug FROM capitulos WHERE obra_id = ? AND id > ? ORDER BY id ASC LIMIT 1");
+                            $stmtNext->bind_param("ii", $idObra, $capIdActual);
+                            $stmtNext->execute();
+                            $resNext = $stmtNext->get_result();
 
                         if ($resNext->num_rows > 0) {
                             $nextCap = $resNext->fetch_assoc();
@@ -142,10 +163,11 @@ $resultado = $conn->query($sql);
                         $btn_clase = "btn-warning text-dark fw-bold";
                     }
                 } else {
-                    // Estado D: El usuario tiene la obra guardada pero nunca ha interactuado con ella.
-                    // Buscamos el primer capítulo cronológico disponible.
-                    $sqlFirst = "SELECT slug FROM capitulos WHERE obra_id = $idObra ORDER BY id ASC LIMIT 1";
-                    $resFirst = $conn->query($sqlFirst);
+                    // Usuario sin historial: buscamos el primer capítulo de la obra
+                    $stmtFirst = $conn->prepare("SELECT slug FROM capitulos WHERE obra_id = ? ORDER BY id ASC LIMIT 1");
+                    $stmtFirst->bind_param("i", $idObra);
+                    $stmtFirst->execute();
+                    $resFirst = $stmtFirst->get_result();
                     if ($resFirst->num_rows > 0) {
                         $firstCap = $resFirst->fetch_assoc();
                         $url_continuar = "/obra/" . $obraSlug . "/" . $firstCap['slug'];

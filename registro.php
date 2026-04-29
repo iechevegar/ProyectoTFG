@@ -124,7 +124,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         <?php if($error): ?>
             <div class="alert alert-danger py-2 px-3 text-start shadow-sm border-danger rounded-3 auth-alert">
-                <i class="fas fa-exclamation-triangle me-2"></i> <?php echo $error; ?>
+                <i class="fas fa-exclamation-triangle me-2"></i> <?php echo h($error); ?>
             </div>
         <?php endif; ?>
 

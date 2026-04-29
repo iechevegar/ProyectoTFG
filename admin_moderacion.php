@@ -241,8 +241,9 @@ if ($res_actividad && $res_actividad->num_rows > 0) {
                             </a>
                             <form action="/admin_moderacion.php" method="POST" class="d-flex" onsubmit="return confirm('¿Eliminar este contenido permanentemente?');">
                                 <input type="hidden" name="borrar" value="1">
-                                <input type="hidden" name="tipo" value="<?php echo $item['tipo']; ?>">
-                                <input type="hidden" name="id" value="<?php echo $item['id']; ?>">
+                                <input type="hidden" name="tipo" value="<?php echo h($item['tipo']); ?>">
+                                <input type="hidden" name="id" value="<?php echo (int)$item['id']; ?>">
+                                <?php echo csrf_field(); ?>
                                 <button type="submit" class="btn btn-sm btn-danger w-100 rounded-pill fw-bold shadow-sm">
                                     <i class="fas fa-trash-alt me-1"></i> Eliminar Contenido
                                 </button>

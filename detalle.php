@@ -283,8 +283,9 @@ include 'includes/header.php';
                                                         <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'admin'): ?>
                                                             <form method="POST" class="d-inline ms-2"
                                                                 onsubmit="return confirm('¿Eliminar definitivamente este registro de la base de datos?');">
-                                                                <input type="hidden" name="borrar_resena"
-                                                                    value="<?php echo $res['id']; ?>">
+                                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="borrar_resena"
+                                                                    value="<?php echo (int)$res['id']; ?>">
                                                                 <button type="submit"
                                                                     class="btn btn-sm btn-outline-danger p-1 ms-1 lh-1 btn-trash-small"
                                                                     title="Borrar reseña">

@@ -1,7 +1,7 @@
 <?php
 session_start();
-require 'includes/db.php';
-require 'includes/funciones.php'; // Importamos librería de formateo (Slugs)
+require_once 'includes/db.php';
+require_once 'includes/funciones.php'; // Importamos librería de formateo (Slugs)
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN (RBAC)
@@ -59,25 +59,24 @@ $resGeneros = $conn->query("SELECT * FROM generos ORDER BY nombre ASC");
 // 3. PROCESAMIENTO DEL PAYLOAD DE ACTUALIZACIÓN (POST)
 // =========================================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    
-    // Sanitizamos el input del usuario eliminando espacios residuales al inicio/final
-    $titulo = trim($_POST['titulo']);
-    $autor = trim($_POST['autor']);
-    $sinopsis = trim($_POST['sinopsis']);
+    csrf_verify('/editar_obra');
 
-    // Sanitización específica para campos que esperan valores predefinidos (Enums o Varchars cerrados)
-    $tipo_obra = $conn->real_escape_string($_POST['tipo_obra']);
-    $demografia = $conn->real_escape_string($_POST['demografia']);
-    $estado_publicacion = $conn->real_escape_string($_POST['estado_publicacion']);
+    $titulo             = trim($_POST['titulo']);
+    $autor              = trim($_POST['autor']);
+    $sinopsis           = trim($_POST['sinopsis']);
+    $tipo_obra          = trim($_POST['tipo_obra']);
+    $demografia         = trim($_POST['demografia']);
+    $estado_publicacion = trim($_POST['estado_publicacion']);
 
-    // --- RECALCULO DE URLS SEMÁNTICAS (SLUG RESOLUTION) ---
-    // Si el administrador cambia el título, el Slug debe actualizarse para mantener el SEO.
+    // --- RECALCULO DE SLUG ---
     $slug = limpiarURL($titulo);
-    
-    // Verificamos que el nuevo Slug no colisione con el de OTRA obra diferente (excluimos la actual).
-    $check_slug = $conn->query("SELECT id FROM obras WHERE slug = '$slug' AND id != $id");
-    if ($check_slug && $check_slug->num_rows > 0) {
-        $slug = $slug . '-' . rand(100, 999); // Inyección de entropía para resolver la colisión
+
+    // Comprobación de colisión excluyendo la propia obra (prepared statement).
+    $stmtSlug = $conn->prepare("SELECT id FROM obras WHERE slug = ? AND id != ?");
+    $stmtSlug->bind_param("si", $slug, $id);
+    $stmtSlug->execute();
+    if ($stmtSlug->get_result()->num_rows > 0) {
+        $slug = $slug . '-' . rand(100, 999);
     }
 
     // --- MANTENIMIENTO DEL FILE SYSTEM (UPDATE CONDICIONAL) ---
@@ -104,10 +103,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($stmt_up->execute()) {
 
         // --- PERSISTENCIA: ACTUALIZACIÓN DE ENTIDADES RELACIONADAS (WIPE & REPLACE) ---
-        // En lugar de calcular el "diff" (qué géneros nuevos se han marcado y cuáles se han desmarcado),
-        // aplicamos el patrón arquitectónico "Wipe and Replace": Borramos todas las relaciones 
-        // actuales de la tabla pivote para esta obra, e insertamos desde cero las que lleguen en el POST.
-        $conn->query("DELETE FROM obra_genero WHERE obra_id = $id");
+        // Wipe & Replace de la tabla pivote con prepared statement.
+        $stmtDel = $conn->prepare("DELETE FROM obra_genero WHERE obra_id = ?");
+        $stmtDel->bind_param("i", $id);
+        $stmtDel->execute();
 
         if (isset($_POST['generos']) && is_array($_POST['generos'])) {
             $stmt_insert_gen = $conn->prepare("INSERT INTO obra_genero (obra_id, genero_id) VALUES (?, ?)");

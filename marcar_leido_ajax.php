@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'includes/db.php';
+require_once 'includes/db.php';
 
 // =========================================================================================
 // 1. ENDPOINT ASÍNCRONO (API RESTful) Y MIDDLEWARE DE ACCESO
@@ -16,10 +16,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['capId']) && isset($_P
     $nombreUser = $_SESSION['usuario'];
     
     // =========================================================================================
-    // 2. RESOLUCIÓN DE IDENTIDAD
+    // 2. RESOLUCIÓN DE IDENTIDAD (PREPARED STATEMENT - Anti-SQLi)
     // =========================================================================================
-    // Extracción del ID numérico del usuario para garantizar la integridad referencial.
-    $resUser = $conn->query("SELECT id FROM usuarios WHERE nombre = '$nombreUser'");
+    $stmtU = $conn->prepare("SELECT id FROM usuarios WHERE nombre = ?");
+    $stmtU->bind_param("s", $nombreUser);
+    $stmtU->execute();
+    $resUser = $stmtU->get_result();
     
     if ($resUser && $resUser->num_rows > 0) {
         $userId = $resUser->fetch_assoc()['id'];

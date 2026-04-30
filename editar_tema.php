@@ -1,7 +1,7 @@
 <?php
 session_start();
-require 'includes/db.php';
-require 'includes/funciones.php'; // Importamos librería para normalización de cadenas (Slugs)
+require_once 'includes/db.php';
+require_once 'includes/funciones.php'; // Importamos librería para normalización de cadenas (Slugs)
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN Y RECEPCIÓN DE PARÁMETROS
@@ -60,12 +60,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // para mantener la coherencia y el SEO del enrutamiento.
         $slug = limpiarURL($titulo);
         
-        // Resolución de Colisiones: Comprobamos si el nuevo slug ya pertenece a otro tema.
-        // NOTA ARQUITECTÓNICA: Es vital añadir "AND id != $idTema" para que el motor SQL no 
-        // detecte una colisión consigo mismo en caso de que el usuario no modifique el título original.
-        $check_slug = $conn->query("SELECT id FROM foro_temas WHERE slug = '$slug' AND id != $idTema");
-        if ($check_slug && $check_slug->num_rows > 0) {
-            $slug = $slug . '-' . rand(100, 999); // Inyección de entropía temporal
+        // Comprobación de colisión excluyendo el propio tema (prepared statement).
+        $stmtSlugET = $conn->prepare("SELECT id FROM foro_temas WHERE slug = ? AND id != ?");
+        $stmtSlugET->bind_param("si", $slug, $idTema);
+        $stmtSlugET->execute();
+        if ($stmtSlugET->get_result()->num_rows > 0) {
+            $slug = $slug . '-' . rand(100, 999);
         }
 
         // Ejecución de la mutación. Usamos NOW() para registrar en el Audit Trail el momento

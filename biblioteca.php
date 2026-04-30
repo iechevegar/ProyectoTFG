@@ -1,6 +1,10 @@
 <?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
-require 'includes/db.php';
+require_once 'includes/db.php';
+require_once 'includes/funciones.php';
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN
@@ -16,7 +20,10 @@ if (!isset($_SESSION['usuario'])) {
 // 2. RESOLUCIÓN DE IDENTIDAD Y EXTRACCIÓN DE DATOS
 // =========================================================================================
 // Obtenemos el ID del usuario mediante prepared statement (Anti-SQLi).
-$userId = get_usuario_id($conn);
+$estadoUser = get_estado_usuario($conn);
+$userId = $estadoUser['id'];
+
+
 
 if (!$userId) {
     header("Location: /login");

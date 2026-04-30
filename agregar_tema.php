@@ -1,7 +1,7 @@
 <?php
 session_start();
-require 'includes/db.php';
-require 'includes/funciones.php'; // Importamos la librería de utilidades para el parseo de cadenas (Slugs)
+require_once 'includes/db.php';
+require_once 'includes/funciones.php'; // Importamos la librería de utilidades para el parseo de cadenas (Slugs)
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN (AUTH CHECK)
@@ -19,15 +19,16 @@ $nombreUser = $_SESSION['usuario'];
 // =========================================================================================
 // 2. VERIFICACIÓN DE ESTADO DE CUENTA (SISTEMA DE BANEOS)
 // =========================================================================================
-// Extraemos el ID del usuario y su fecha de penalización.
-// Aplicamos un patrón Fail-Fast: si el usuario está suspendido, cortamos la ejecución 
-// inmediatamente antes de cargar o procesar formularios.
-$resUser = $conn->query("SELECT id, fecha_desbloqueo FROM usuarios WHERE nombre = '$nombreUser'");
-$userData = $resUser->fetch_assoc();
-$userId = $userData['id'];
+// Usamos get_estado_usuario() que internamente usa prepared statement (Anti-SQLi).
+$estadoUser = get_estado_usuario($conn);
+$userId = $estadoUser['id'];
 
-if (!empty($userData['fecha_desbloqueo']) && strtotime($userData['fecha_desbloqueo']) > time()) {
-    // El usuario tiene una restricción activa (Soft-Ban). Lo expulsamos de vuelta al índice del foro.
+if (!$userId) {
+    header("Location: /login");
+    exit();
+}
+
+if ($estadoUser['suspendido']) {
     header("Location: /foro?error=cuenta_suspendida");
     exit();
 }
@@ -50,12 +51,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // (ej: "que-opinais-de-solo-leveling") para mejorar el SEO y el enrutamiento.
         $slug = limpiarURL($titulo);
         
-        // Prevención de Colisiones (Collision Resolution):
-        // Comprobamos contra la base de datos si ya existe un hilo con exactamente el mismo Slug.
-        // Si existe, introducimos entropía (un número aleatorio) para garantizar la unicidad de la URL.
-        $check_slug = $conn->query("SELECT id FROM foro_temas WHERE slug = '$slug'");
-        if ($check_slug && $check_slug->num_rows > 0) {
-            $slug = $slug . '-' . rand(100, 999); 
+        // Comprobación de colisión de slug con prepared statement (Anti-SQLi).
+        $stmtSlugT = $conn->prepare("SELECT id FROM foro_temas WHERE slug = ?");
+        $stmtSlugT->bind_param("s", $slug);
+        $stmtSlugT->execute();
+        if ($stmtSlugT->get_result()->num_rows > 0) {
+            $slug = $slug . '-' . rand(100, 999);
         }
 
         // --- PERSISTENCIA DE DATOS (PREPARED STATEMENTS) ---

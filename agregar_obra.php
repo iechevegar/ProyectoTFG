@@ -1,7 +1,7 @@
 <?php
 session_start();
-require 'includes/db.php';
-require 'includes/funciones.php';
+require_once 'includes/db.php';
+require_once 'includes/funciones.php';
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN Y AUTORIZACIÓN (RBAC)
@@ -23,26 +23,25 @@ $resGeneros = $conn->query("SELECT * FROM generos ORDER BY nombre ASC");
 // 2. PROCESAMIENTO DEL PAYLOAD (MÉTODO POST)
 // =========================================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    
-    // --- SANITIZACIÓN DE ENTRADAS (Anti-SQLi) ---
-    // Limpiamos agresivamente todas las cadenas de texto recibidas del formulario
-    // para neutralizar cualquier intento de Inyección SQL.
-    $titulo = $conn->real_escape_string($_POST['titulo']);
-    $autor = $conn->real_escape_string($_POST['autor']);
-    $sinopsis = $conn->real_escape_string($_POST['sinopsis']);
-    $tipo_obra = $conn->real_escape_string($_POST['tipo_obra']);
-    $demografia = $conn->real_escape_string($_POST['demografia']);
-    $estado_publicacion = $conn->real_escape_string($_POST['estado_publicacion']);
+    csrf_verify('/agregar_obra');
 
-    // --- ALGORITMO DE GENERACIÓN DE RUTAS SEMÁNTICAS (SLUGS) ---
-    // Convertimos el título ingresado a un formato URL-friendly (ej: "Solo Leveling" -> "solo-leveling").
-    $slug = limpiarURL($_POST['titulo']);
-    
-    // Implementamos una rutina de resolución de colisiones: consultamos si el slug ya existe.
-    // De ser así, inyectamos entropía concatenando un sufijo numérico aleatorio para 
-    // asegurar que no violemos la restricción UNIQUE de la columna 'slug' en la BD.
-    $comprobacion = $conn->query("SELECT id FROM obras WHERE slug = '$slug'");
-    if ($comprobacion && $comprobacion->num_rows > 0) {
+    // Sanitización básica: eliminamos espacios residuales
+    $titulo             = trim($_POST['titulo']);
+    $autor              = trim($_POST['autor']);
+    $sinopsis           = trim($_POST['sinopsis']);
+    $tipo_obra          = trim($_POST['tipo_obra']);
+    $demografia         = trim($_POST['demografia']);
+    $estado_publicacion = trim($_POST['estado_publicacion']);
+
+    // --- ALGORITMO DE GENERACIÓN DE SLUGS ---
+    // Convertimos el título a un formato URL-friendly (ej: "Solo Leveling" -> "solo-leveling").
+    $slug = limpiarURL($titulo);
+
+    // Resolución de colisiones con prepared statement (Anti-SQLi).
+    $stmtSlug = $conn->prepare("SELECT id FROM obras WHERE slug = ?");
+    $stmtSlug->bind_param("s", $slug);
+    $stmtSlug->execute();
+    if ($stmtSlug->get_result()->num_rows > 0) {
         $slug = $slug . '-' . rand(100, 999);
     }
 
@@ -75,12 +74,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // =========================================================================================
     if (empty($mensaje)) {
         
-        // FASE A: Inserción de la entidad Padre (Tabla 'obras')
-        $sql = "INSERT INTO obras (titulo, slug, autor, sinopsis, portada, tipo_obra, demografia, estado_publicacion) 
-                VALUES ('$titulo', '$slug', '$autor', '$sinopsis', '$ruta_portada', '$tipo_obra', '$demografia', '$estado_publicacion')";
+    // FASE A: INSERT con prepared statement (Anti-SQLi)
+        $sqlInsert = "INSERT INTO obras (titulo, slug, autor, sinopsis, portada, tipo_obra, demografia, estado_publicacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        $stmtIns = $conn->prepare($sqlInsert);
+        $stmtIns->bind_param("ssssssss", $titulo, $slug, $autor, $sinopsis, $ruta_portada, $tipo_obra, $demografia, $estado_publicacion);
 
-        if ($conn->query($sql)) {
-            // Recuperamos la Primary Key auto-generada para poder enlazar las relaciones foráneas
+        if ($stmtIns->execute()) {
             $obra_id = $conn->insert_id;
 
             // FASE B: Inserción en Tabla Pivote (Relación Many-to-Many N:M para géneros)
@@ -129,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="card-body p-4">
 
                     <form action="" method="POST" enctype="multipart/form-data">
+                        <?php echo csrf_field(); ?>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">

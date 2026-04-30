@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'includes/db.php';
+require_once 'includes/db.php';
 
 // =========================================================================================
 // 1. MIDDLEWARE DE AUTENTICACIÓN Y VALIDACIÓN DE ESTADO
@@ -28,9 +28,9 @@ $sql = "SELECT r.*, t.slug as tema_slug, t.titulo as tema_titulo
         FROM foro_respuestas r 
         JOIN usuarios u ON r.usuario_id = u.id 
         JOIN foro_temas t ON r.tema_id = t.id
-        WHERE r.id = $idResp AND u.nombre = ?";
+        WHERE r.id = ? AND u.nombre = ?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("s", $nombreUser);
+$stmt->bind_param("is", $idResp, $nombreUser);
 $stmt->execute();
 $resp = $stmt->get_result()->fetch_assoc();
 

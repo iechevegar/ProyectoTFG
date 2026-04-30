@@ -1,7 +1,7 @@
 <?php
 session_start();
-require 'includes/db.php';
-require 'includes/funciones.php'; // Importamos la librería de utilidades compartidas (generación de slugs, etc.)
+require_once 'includes/db.php';
+require_once 'includes/funciones.php'; // Importamos la librería de utilidades compartidas (generación de slugs, etc.)
 
 // =========================================================================================
 // 1. CONTROL DE ACCESO (RBAC) Y VALIDACIÓN DE PARÁMETROS
@@ -21,10 +21,11 @@ if (!isset($_GET['id'])) {
 $idObra = intval($_GET['id']);
 $mensaje = '';
 
-// Extraemos los metadatos de la obra padre para construir posteriormente
-// las rutas relativas del sistema de archivos y los embeds de Discord.
-$sqlObra = "SELECT titulo, slug, portada FROM obras WHERE id = $idObra";
-$resObra = $conn->query($sqlObra);
+// Extraemos los metadatos de la obra padre con prepared statement (Anti-SQLi).
+$stmtObra = $conn->prepare("SELECT titulo, slug, portada FROM obras WHERE id = ?");
+$stmtObra->bind_param("i", $idObra);
+$stmtObra->execute();
+$resObra = $stmtObra->get_result();
 if ($resObra->num_rows === 0) {
     header("Location: /admin");
     exit();
@@ -36,17 +37,20 @@ $datosObra = $resObra->fetch_assoc();
 // 2. PROCESAMIENTO DEL FORMULARIO MULTIPART (SUBIDA DE ARCHIVOS)
 // =========================================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $titulo_cap = $conn->real_escape_string(trim($_POST['titulo']));
+    csrf_verify('/agregar_capitulo');
+
+    // Sanitización básica: eliminamos espacios residuales.
+    $titulo_cap = trim($_POST['titulo']);
 
     // --- ALGORITMO DE SLUGS Y PREVENCIÓN DE COLISIONES ---
-    // Generamos el slug a partir del título para las URLs amigables.
-    $slug_cap = limpiarURL($_POST['titulo']);
+    $slug_cap = limpiarURL($titulo_cap);
 
-    // Comprobamos si ya existe un capítulo con el mismo slug para esta misma obra.
-    // Si existe una colisión, introducimos entropía (un sufijo numérico aleatorio) para evitar el error de base de datos.
-    $check_slug = $conn->query("SELECT id FROM capitulos WHERE obra_id = $idObra AND slug = '$slug_cap'");
-    if ($check_slug && $check_slug->num_rows > 0) {
-        $slug_cap = $slug_cap . '-' . rand(100, 999); 
+    // Comprobación de colisión con prepared statement (Anti-SQLi).
+    $stmtSlugC = $conn->prepare("SELECT id FROM capitulos WHERE obra_id = ? AND slug = ?");
+    $stmtSlugC->bind_param("is", $idObra, $slug_cap);
+    $stmtSlugC->execute();
+    if ($stmtSlugC->get_result()->num_rows > 0) {
+        $slug_cap = $slug_cap . '-' . rand(100, 999);
     }
 
     $rutas_imagenes = [];

@@ -147,7 +147,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="card-body p-4">
                     
                     <form method="POST" action="" enctype="multipart/form-data">
-
+                        <?php echo csrf_field(); ?>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-bold text-secondary small text-uppercase">Título</label>

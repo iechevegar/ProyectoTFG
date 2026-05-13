@@ -225,7 +225,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     </div>
 
                     <form id="formSubida" method="POST" action="" enctype="multipart/form-data">
-
+						<?php echo csrf_field(); ?>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-secondary small text-uppercase">Título del Capítulo
                                 *</label>

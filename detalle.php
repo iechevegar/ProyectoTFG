@@ -262,7 +262,14 @@ include 'includes/header.php';
                                     <div class="card-body p-4">
                                         <div class="d-flex align-items-start mb-3 border-bottom pb-3">
                                             <div class="flex-shrink-0">
-                                                <?php $foto = !empty($res['foto']) ? ((strpos($res['foto'], 'http') === 0) ? $res['foto'] : '/' . ltrim($res['foto'], '/')) : 'https://via.placeholder.com/50'; ?>
+                                                <?php 
+                                                if (!empty($res['foto'])) {
+                                                    $foto = (strpos($res['foto'], 'http') === 0) ? $res['foto'] : '/' . ltrim($res['foto'], '/');
+                                                } else {
+                                                    // Generador de avatares con la inicial del autor de la reseña y tu color corporativo
+                                                    $foto = 'https://ui-avatars.com/api/?name=' . urlencode($res['nombre']) . '&background=0D8A92&color=fff&size=64&font-size=0.4&bold=true';
+                                                }
+                                                ?>
                                                 <img src="<?php echo htmlspecialchars($foto); ?>"
                                                     class="rounded-circle border border-2 border-light shadow-sm review-avatar"
                                                     width="55" height="55">

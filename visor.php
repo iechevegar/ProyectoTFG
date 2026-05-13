@@ -272,7 +272,12 @@ $resCom = $stmtCom->get_result();
             <?php while ($com = $resCom->fetch_assoc()): ?>
                 <div class="caja-comentario">
                     <?php
-                    $fotoUser = !empty($com['foto']) ? ((strpos($com['foto'], 'http') === 0) ? $com['foto'] : '/' . ltrim($com['foto'], '/')) : 'https://via.placeholder.com/45';
+                    if (!empty($com['foto'])) {
+                        $fotoUser = (strpos($com['foto'], 'http') === 0) ? $com['foto'] : '/' . ltrim($com['foto'], '/');
+                    } else {
+                        // Generador dinámico con la inicial del comentarista y el color de IoriScans
+                        $fotoUser = 'https://ui-avatars.com/api/?name=' . urlencode($com['nombre']) . '&background=0D8A92&color=fff&size=64&font-size=0.4&bold=true';
+                    }
                     ?>
                     <img src="<?php echo htmlspecialchars($fotoUser); ?>" class="avatar-comentario" alt="Avatar">
 

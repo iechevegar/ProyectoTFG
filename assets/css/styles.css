@@ -242,6 +242,11 @@ body.visor-body { background-color: #0f0f11; color: #fff; margin: 0; padding: 0;
 .login-card { max-width: 420px; width: 100%; border-radius: 16px; background-color: #ffffff; text-align: center; }
 .login-input-style { border-radius: 10px; padding: 12px 15px; border: 1px solid #e2e8f0; }
 .login-input-style:focus { border-color: var(--iori-primary); box-shadow: 0 0 0 0.25rem rgba(10, 134, 136, 0.25); }
+.login-brand-logo {
+    max-width: 280px; /* Tamaño ideal para que luzca bien sin comerse toda la pantalla */
+    width: 100%; /* Evita que se desborde en móviles muy estrechos */
+    height: auto; /* Mantiene la proporción perfecta original */
+}
 
 /* =========================================================================================
    10. PANEL DE ADMINISTRACIÓN Y BACKOFFICE
@@ -249,7 +254,43 @@ body.visor-body { background-color: #0f0f11; color: #fff; margin: 0; padding: 0;
 .admin-main-container { min-height: 80vh; background-color: #f4f6f8; }
 .admin-table-hover tbody tr:hover { background-color: #f8f9fa; transition: background-color 0.2s ease; }
 .preview-grid-container { max-height: 300px; overflow-y: auto; padding: 0.5rem; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
-.preview-img-wrapper { position: relative; width: 80px; height: 120px; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); border: 1px solid #ccc; }
+/* 1. CAJA BLINDADA CONTRA ESTIRAMIENTOS */
+.preview-img-wrapper { 
+    position: relative; 
+    width: 80px !important; 
+    height: 120px !important; 
+    min-width: 80px !important; /* Innegociable para Flexbox */
+    flex: 0 0 80px !important;  /* Prohíbe crecer o encogerse */
+    border-radius: 4px; 
+    overflow: hidden; 
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); 
+    border: 1px solid #ccc; 
+}
+
+/* 2. IMAGEN SOMETIDA A LA CAJA */
+.preview-img-wrapper img {
+    position: absolute; /* Al ser absoluta, no puede hacer fuerza contra las paredes */
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+}
+
+/* 3. CARTELITO DE PÁGINA (Para que quede profesional) */
+.preview-img-badge {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-align: center;
+    padding: 2px 0;
+    z-index: 10;
+}
 .admin-cover-img { width: 65px; height: 95px; object-fit: cover; }
 .admin-cap-cover { width: 120px; height: 180px; object-fit: cover; }
 .avatar-admin-list { width: 45px; height: 45px; object-fit: cover; }
@@ -259,6 +300,16 @@ body.visor-body { background-color: #0f0f11; color: #fff; margin: 0; padding: 0;
 .btn-info:hover { background-color: #0aa2c0 !important; border-color: #0aa2c0 !important; color: #fff !important; }
 .btn-warning:hover { background-color: #e0a800 !important; border-color: #e0a800 !important; color: #fff !important; }
 .btn-danger:hover { background-color: #c82333 !important; border-color: #bd2130 !important; color: #fff !important; }
+
+/* Miniatura de la portada al subir un capítulo */
+.thumb-obra-subida {
+    width: 125px !important;      /* Antes era 65px */
+    height: 175px !important;    /* Antes era 95px */
+    object-fit: cover !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15); /* Sombra un pelín más marcada */
+    border-radius: 6px !important; /* Bordes un poco más suaves */
+}
 
 /* =========================================================================================
    11. SISTEMA NATIVO DE MODO OSCURO (DATA-BS-THEME OVERRIDES)
@@ -332,6 +383,36 @@ body.visor-body { background-color: #0f0f11; color: #fff; margin: 0; padding: 0;
 [data-bs-theme="dark"] .hover-iori:hover * {
     color: var(--iori-primary) !important;
     text-decoration: none !important;
+}
+/* 7. Arreglo del hover en listas laterales Y en el botón de cambiar tema */
+[data-bs-theme="dark"] .hover-bg-light:hover { background-color: #2a2a2a !important; }
+[data-bs-theme="dark"] .theme-toggle-btn { border-color: #444 !important; color: #fbbf24 !important; }
+[data-bs-theme="dark"] .theme-toggle-btn:hover { background-color: #2a2a2a !important; color: #fbbf24 !important; }
+
+/* 8. Arreglo de los Dropdowns en Modo Oscuro (Respetando colores especiales) */
+/* Ponemos el texto claro EXCEPTO a los que ya tienen sus colores propios */
+[data-bs-theme="dark"] .dropdown-item:not(.text-danger):not(.text-iori) {
+    color: #e0e0e0 !important; 
+}
+
+/* Fondo gris oscuro al pasar el ratón para TODOS */
+[data-bs-theme="dark"] .dropdown-item:hover {
+    background-color: #2a2a2a !important; 
+}
+
+/* Al pasar el ratón, los enlaces normales y el Admin se vuelven turquesa... */
+[data-bs-theme="dark"] .dropdown-item:not(.text-danger):hover {
+    color: var(--iori-primary) !important; 
+}
+
+/* ... pero el de cerrar sesión se vuelve de un rojo más brillante para avisar */
+[data-bs-theme="dark"] .dropdown-item.text-danger:hover {
+    color: #ff6b6b !important; 
+}
+
+/* Oscurecemos también la línea separadora para que no deslumbre */
+[data-bs-theme="dark"] .dropdown-divider {
+    background-color: #333 !important;
 }
 
 /* =========================================================================================
